@@ -10,7 +10,7 @@ Looking at one of the fragmentary processing sketches from "Didaktik Gama" to po
 
 This used tracery and word lists from corpora project and my own libraries, and the spritesheet and sounds from Dungeon Mode Kit to simulate some sort of sigil/ideogram/divination figure from no known system.
 
-Looking at this again I'm struggling to find what it is about, since it seems to come from an undefined fantasy world but uses characters from our world and has names written in english using words we know.
+Looking at this again I'm struggling to find what it is about, since it seems to come from an undefined fantasy world but uses characters from our world and has names written in english using words we know (It's from a dungeon world!)
 
 This morning I thought that each glyph could be introduced one at a time as a form of writing, with the title on top a translation.
 
