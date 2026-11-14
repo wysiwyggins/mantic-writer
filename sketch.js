@@ -3,14 +3,16 @@ let tintcolor;
 let CANVAS_COLS;
 let CANVAS_ROWS;
 let shouldInvertColors = false;
-let hoveredTile = null;
 let figureName = '';
+let currentSeed = null; // the seed that produced the figure on screen
+let rng = Math.random;  // per-figure seeded generator, replaced in initializeSketch()
 let tileKeys = [];
 let numTiles = 0;
 let usedPositions = [];
 let currentTileIndex = 0;
 let reverb;
 let placementTimeout = null;
+let premadeTiles = null; // tiles of a pre-made arrangement being placed (tilemaps.js), or null
 
 const tilePlacementDelayNormal = 50; 
 const tilePlacementDelayInverted = 0; 
@@ -22,6 +24,7 @@ function preload() {
     sounds[i] = loadSound(`./assets/sounds/${i}.wav`);
   }
   preloadCorporaFiles();
+  preloadTilemaps(); // tilemaps.js
    
   let uniqueTiles = {};
   for (let key in spritesheetData.tiles) {
@@ -41,14 +44,15 @@ function updateGridSize() {
 function setup() {
   updateGridSize();
   createCanvas(CANVAS_COLS * globalVars.TILE_WIDTH, CANVAS_ROWS * globalVars.TILE_HEIGHT);
-  initializeSketch();
+  // On high-DPI screens each 40x30 tile is scaled up, and smoothing would
+  // sample the neighbouring glyph on the spritesheet, leaving faint lines
+  // around tiles. Nearest-neighbour keeps the scaling exact.
+  noSmooth();
   reverb = new p5.Reverb();
   setupTraceryGrammar();
-
-  // In the Electron app, a touch on the GPIO panel starts a new figure.
-  if (window.installation) {
-    window.installation.onTouch(() => initializeSketch());
-  }
+  initializeSketch();
+  setupChordInput(); // input.js: MIDI chords from the Nano ESP32 or a MIDI keyboard
+  setupArchive();    // archive.js: saved seeds and attract mode
 }
 
 // Refit the canvas to the new viewport. Debounced so dragging a window edge
@@ -62,8 +66,9 @@ function windowResized() {
     updateGridSize();
     if (CANVAS_COLS === prevCols && CANVAS_ROWS === prevRows) return;
     resizeCanvas(CANVAS_COLS * globalVars.TILE_WIDTH, CANVAS_ROWS * globalVars.TILE_HEIGHT);
-    // Existing tile positions may fall outside the new grid, so start a fresh figure.
-    initializeSketch();
+    noSmooth(); // resizing can reset the canvas context's settings
+    // Existing tile positions may fall outside the new grid, so lay the same figure out again.
+    initializeSketch(currentSeed);
   }, 200);
 }
 
@@ -72,52 +77,77 @@ function draw() {
   for (let tile of tiles) {
     drawTile(tile);
   }
-  if (hoveredTile) {
-    drawName(hoveredTile.key, hoveredTile.flipH || hoveredTile.flipV);
-  }
   if (figureName) {
     displayFigureName(figureName);
   }
+  drawArchiveMessage(); // archive.js: brief notices such as "SAVED"
+  drawVariationIndicator(); // input.js: knob zone, shown briefly while turning
   if (shouldInvertColors) {
     filter(INVERT);
   }
 }
 
-function initializeSketch() {
+// Pick a seed when none is given (mouse click, space bar, first load).
+function randomSeedString() {
+  return 'r' + crypto.getRandomValues(new Uint32Array(1))[0];
+}
+
+// Seeded stand-in for p5's random(): no args -> [0,1), array -> element, (a) -> [0,a), (a,b) -> [a,b).
+function rnd(a, b) {
+  let r = rng();
+  if (a === undefined) return r;
+  if (Array.isArray(a)) return a[Math.floor(r * a.length)];
+  if (b === undefined) return r * a;
+  return a + r * (b - a);
+}
+
+// The seed fully determines the figure: glyphs, flips, layout, colour,
+// inversion, sound and (via the layout) the name. Some chords show a
+// pre-made arrangement instead of a generated layout (tilemaps.js).
+function initializeSketch(seed) {
   // Stop any tile placement still running from the previous figure.
   clearTimeout(placementTimeout);
   placementTimeout = null;
   figureName = '';
 
+  currentSeed = (seed === undefined || seed === null) ? randomSeedString() : String(seed);
+  rng = new Math.seedrandom('mantic:' + currentSeed);
+  console.log(`Figure seed: ${currentSeed}`);
+
   randomizeBackgroundColor();
   
   tileKeys = Object.keys(spritesheetData.tiles);
-  numTiles = int(random(2, 11));
   let centerX = Math.floor(CANVAS_COLS / 2) * globalVars.TILE_WIDTH;
   let centerY = Math.floor(CANVAS_ROWS / 2) * globalVars.TILE_HEIGHT;
-  
+
   tiles = [];
   usedPositions = [];
   currentTileIndex = 0;
 
-  let initialKey = random(tileKeys);
-  let initialTile = {
-    pos: createVector(centerX, centerY),
-    key: initialKey,
-    coords: spritesheetData.tiles[initialKey],
-    flipH: random() > 0.8,  
-    flipV: random() > 0.8  
-  };
-  tiles.push(initialTile);
-  usedPositions.push(initialTile.pos);
+  let map = tilemapForSeed(currentSeed);
+  premadeTiles = map ? tilesFromTilemap(map, centerX, centerY) : null;
+  if (premadeTiles && premadeTiles.length === 0) premadeTiles = null; // didn't fit on screen
+
+  if (premadeTiles) {
+    numTiles = premadeTiles.length;
+    tiles.push(premadeTiles[0]);
+  } else {
+    numTiles = Math.floor(rnd(2, 11));
+    let initialKey = rnd(tileKeys);
+    let initialTile = {
+      pos: createVector(centerX, centerY),
+      key: initialKey,
+      coords: spritesheetData.tiles[initialKey],
+      flipH: rnd() > 0.8,
+      flipV: rnd() > 0.8
+    };
+    tiles.push(initialTile);
+    usedPositions.push(initialTile.pos);
+  }
   
   tintcolor = color(300 - red(baseColor), 300 - green(baseColor), 300 - blue(baseColor));
   
-  if (random() < 0.1) { 
-    shouldInvertColors = true;
-  } else {
-    shouldInvertColors = false;
-  }
+  shouldInvertColors = rnd() < 0.1;
 
   updateBodyBackground();
 
@@ -125,9 +155,9 @@ function initializeSketch() {
 }
 
 function playRandomSound() {
-  let randomIndex = int(random(sounds.length));
+  let randomIndex = Math.floor(rnd(sounds.length));
   let randomSound = sounds[randomIndex];
-  let randomRate = random(0.5, 2.0); 
+  let randomRate = rnd(0.5, 2.0);
   randomSound.rate(randomRate);
   randomSound.play();
   reverb.process(randomSound, 1, 3);
@@ -138,7 +168,12 @@ function placeNextTile() {
     currentTileIndex++;
     let delay = shouldInvertColors ? tilePlacementDelayInverted : tilePlacementDelayNormal;
     placementTimeout = setTimeout(() => {
-      let tileKey = random(tileKeys);
+      if (premadeTiles) {
+        tiles.push(premadeTiles[currentTileIndex]);
+        placeNextTile();
+        return;
+      }
+      let tileKey = rnd(tileKeys);
       let tilePos = spritesheetData.tiles[tileKey];
       
       let pos = findRandomAdjacentPosition(usedPositions);
@@ -147,8 +182,8 @@ function placeNextTile() {
         pos: pos,
         key: tileKey,
         coords: tilePos,
-        flipH: random() > 0.8,
-        flipV: random() > 0.8 
+        flipH: rnd() > 0.8,
+        flipV: rnd() > 0.8
       });
       
       usedPositions.push(pos);
@@ -156,7 +191,7 @@ function placeNextTile() {
     }, delay);
   } else {
     playRandomSound(); 
-    figureName = generateFigureNameFromTiles(); 
+    figureName = premadeTiles ? tilemapTitle(currentSeed) : generateFigureNameFromTiles(); 
   }
 }
 
@@ -164,7 +199,7 @@ function findRandomAdjacentPosition(usedPositions) {
   let validPositions = [];
   
   while (validPositions.length === 0) {
-    let basePos = random(usedPositions);
+    let basePos = rnd(usedPositions);
     let adjacentPositions = [
       createVector(basePos.x + globalVars.TILE_WIDTH, basePos.y),
       createVector(basePos.x - globalVars.TILE_WIDTH, basePos.y),
@@ -179,7 +214,7 @@ function findRandomAdjacentPosition(usedPositions) {
     );
   }
   
-  return random(validPositions);
+  return rnd(validPositions);
 }
 
 function drawTile(tile) {
@@ -197,7 +232,7 @@ function drawTile(tile) {
 }
 
 function randomizeBackgroundColor() {
-  baseColor = color(random(100, 255), random(100, 255), random(100, 255));
+  baseColor = color(rnd(100, 255), rnd(100, 255), rnd(100, 255));
 }
 
 // Match the page background to the canvas so the letterbox area blends in.
@@ -208,26 +243,6 @@ function updateBodyBackground() {
     r = 255 - r; g = 255 - g; b = 255 - b;
   }
   document.body.style.backgroundColor = `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
-}
-
-function mouseMoved() {
-  let mouseXIndex = Math.floor(mouseX / globalVars.TILE_WIDTH);
-  let mouseYIndex = Math.floor(mouseY / globalVars.TILE_HEIGHT);
-  hoveredTile = null;
-  
-  for (let tile of tiles) {
-    let tileXIndex = Math.floor(tile.pos.x / globalVars.TILE_WIDTH);
-    let tileYIndex = Math.floor(tile.pos.y / globalVars.TILE_HEIGHT);
-    if (mouseXIndex === tileXIndex && mouseYIndex === tileYIndex) {
-      hoveredTile = tile;
-      console.log(`Hovered over tile: ${tile.key}`); // Debugging
-      break;
-    }
-  }
-}
-
-function drawName(name, isInverted) {
-  displayText(name, height - 3 * globalVars.TILE_HEIGHT, isInverted);
 }
 
 function displayFigureName(name) {
@@ -333,24 +348,44 @@ function displayTile(char, col, row) {
 
 // Browsers keep audio switched off until the first click, key press or touch,
 // so resume it from inside those handlers. (Electron allows audio from the start.)
-function keyPressed() {
+// Space/Enter or a click starts a random figure (handy for testing; the
+// installation itself is driven by MIDI chords). Cmd/Ctrl shortcuts are
+// handled in archive.js.
+function keyPressed(event) {
   userStartAudio();
-  initializeSketch();
+  if (event && (event.metaKey || event.ctrlKey)) return;
+  if (key === ' ' || keyCode === ENTER) {
+    stopAttractMode();
+    initializeSketch();
+    return false;
+  }
+  if (key === 'a' || key === 'A') {
+    toggleAttractMode();
+  }
 }
 
 function mousePressed() {
   userStartAudio();
+  stopAttractMode();
   initializeSketch();
 }
 
 function touchStarted() {
   userStartAudio();
+  stopAttractMode();
   initializeSketch();
+  return false;
 }
 
 function generateFigureNameFromTiles() {
-  // Create a unique key based on the tiles' positions, keys, and flips
-  let key = tiles.map(tile => `${tile.pos.x},${tile.pos.y},${tile.key},${tile.flipH},${tile.flipV}`).join(';');
+  // Create a unique key based on the tiles' grid offsets from the first tile,
+  // keys, and flips, so the name doesn't depend on screen size.
+  let origin = tiles[0].pos;
+  let key = tiles.map(tile => {
+    let dx = Math.round((tile.pos.x - origin.x) / globalVars.TILE_WIDTH);
+    let dy = Math.round((tile.pos.y - origin.y) / globalVars.TILE_HEIGHT);
+    return `${dx},${dy},${tile.key},${tile.flipH},${tile.flipV}`;
+  }).join(';');
   
   // Use the key to seed a deterministic random generator
   Math.seedrandom(key);
@@ -359,13 +394,3 @@ function generateFigureNameFromTiles() {
   return generateFigureName();
 }
 
-// Simple hash function to convert a string to a seed
-function hashString(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    let char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash |= 0; // Convert to 32bit integer
-  }
-  return hash.toString();
-}
