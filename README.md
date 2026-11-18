@@ -263,7 +263,7 @@ Current Raspberry Pi OS uses the labwc desktop. Add this line to
 `~/.config/labwc/autostart` (create the file if needed):
 
 ```sh
-chromium --kiosk --noerrdialogs --disable-infobars --autoplay-policy=no-user-gesture-required http://localhost:8000 &
+chromium --kiosk --noerrdialogs --disable-infobars --password-store=basic --autoplay-policy=no-user-gesture-required http://localhost:8000 &
 ```
 
 - On older images the browser is `chromium-browser` instead of `chromium`.
@@ -273,6 +273,10 @@ chromium --kiosk --noerrdialogs --disable-infobars --autoplay-policy=no-user-ges
   `[autostart]` section in `~/.config/wayfire.ini` instead.
 
 - `--autoplay-policy=no-user-gesture-required` lets sound play without a click.
+
+- `--password-store=basic` stops Chromium from using the system keyring. Without it,
+  every boot stops at an "Unlock Default Keyring" password prompt, because
+  autologin never unlocks the keyring.
 
 Reboot. The sketch should come up full-screen, and touching pads should draw
 figures. Press **Alt-F4** to leave kiosk mode.
@@ -292,6 +296,7 @@ figures. Press **Alt-F4** to leave kiosk mode.
 | Drag a JSON file onto the window | Import a saved list (merged with the current one) |
 | **A** key, or the Nano's attract button (D8) | Toggle attract mode |
 | Space / Enter / click | Random figure (for testing) |
+| **+** / **-** keys | Make the tiles bigger or smaller on screen (1x, 2x, 3x…), e.g. to suit a projector. Remembered across restarts |
 
 **Variations**: the knob's zone (one of 8 equal slices of its turn) becomes
 part of the seed. Fully counter-clockwise (zone 0) gives the plain chord seed,

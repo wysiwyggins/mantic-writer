@@ -36,9 +36,43 @@ function preload() {
   spritesheetData.uniqueTiles = uniqueTiles;
 }
 
+// Display scale: each tile is drawn this many times larger on screen, so a
+// projector can show bigger glyphs. Whole numbers only, so every spritesheet
+// pixel becomes the same number of screen pixels (fractions give uneven lines).
+// Changed with the + and - keys and remembered across restarts.
+const SCALE_STORAGE_KEY = 'manticDisplayScale';
+const MAX_DISPLAY_SCALE = 8;
+let displayScale = loadDisplayScale();
+
+function loadDisplayScale() {
+  let s = parseInt(localStorage.getItem(SCALE_STORAGE_KEY), 10);
+  return (s >= 1 && s <= MAX_DISPLAY_SCALE) ? s : 1;
+}
+
+function changeDisplayScale(step) {
+  let next = constrain(displayScale + step, 1, MAX_DISPLAY_SCALE);
+  // Keep at least a few tiles across, or the figure has nowhere to grow.
+  if (step > 0 && windowWidth / (globalVars.TILE_WIDTH * next) < 4) next = displayScale;
+  if (next !== displayScale) {
+    displayScale = next;
+    localStorage.setItem(SCALE_STORAGE_KEY, String(displayScale));
+    refitCanvas();
+  }
+  showArchiveMessage(`SIZE ${displayScale}X`);
+}
+
 function updateGridSize() {
-  CANVAS_COLS = Math.floor(windowWidth / globalVars.TILE_WIDTH);
-  CANVAS_ROWS = Math.floor(windowHeight / globalVars.TILE_HEIGHT);
+  CANVAS_COLS = Math.floor(windowWidth / (globalVars.TILE_WIDTH * displayScale));
+  CANVAS_ROWS = Math.floor(windowHeight / (globalVars.TILE_HEIGHT * displayScale));
+}
+
+// The sketch draws at 1x; CSS enlarges the canvas (image-rendering: pixelated
+// in style.css keeps the enlargement sharp). Must run after createCanvas() or
+// resizeCanvas(), which overwrite the canvas's style size.
+function applyDisplayScale() {
+  let c = document.querySelector('canvas');
+  c.style.width = (width * displayScale) + 'px';
+  c.style.height = (height * displayScale) + 'px';
 }
 
 function setup() {
@@ -48,6 +82,7 @@ function setup() {
   // sample the neighbouring glyph on the spritesheet, leaving faint lines
   // around tiles. Nearest-neighbour keeps the scaling exact.
   noSmooth();
+  applyDisplayScale();
   reverb = new p5.Reverb();
   setupTraceryGrammar();
   initializeSketch();
@@ -60,16 +95,20 @@ function setup() {
 let resizeTimeout;
 function windowResized() {
   clearTimeout(resizeTimeout);
-  resizeTimeout = setTimeout(() => {
-    let prevCols = CANVAS_COLS;
-    let prevRows = CANVAS_ROWS;
-    updateGridSize();
-    if (CANVAS_COLS === prevCols && CANVAS_ROWS === prevRows) return;
-    resizeCanvas(CANVAS_COLS * globalVars.TILE_WIDTH, CANVAS_ROWS * globalVars.TILE_HEIGHT);
-    noSmooth(); // resizing can reset the canvas context's settings
-    // Existing tile positions may fall outside the new grid, so lay the same figure out again.
-    initializeSketch(currentSeed);
-  }, 200);
+  resizeTimeout = setTimeout(refitCanvas, 200);
+}
+
+function refitCanvas() {
+  let prevCols = CANVAS_COLS;
+  let prevRows = CANVAS_ROWS;
+  updateGridSize();
+  applyDisplayScale(); // the window may have changed even if the grid didn't
+  if (CANVAS_COLS === prevCols && CANVAS_ROWS === prevRows) return;
+  resizeCanvas(CANVAS_COLS * globalVars.TILE_WIDTH, CANVAS_ROWS * globalVars.TILE_HEIGHT);
+  noSmooth(); // resizing can reset the canvas context's settings
+  applyDisplayScale();
+  // Existing tile positions may fall outside the new grid, so lay the same figure out again.
+  initializeSketch(currentSeed);
 }
 
 function draw() {
@@ -350,7 +389,7 @@ function displayTile(char, col, row) {
 // so resume it from inside those handlers. (Electron allows audio from the start.)
 // Space/Enter or a click starts a random figure (handy for testing; the
 // installation itself is driven by MIDI chords). Cmd/Ctrl shortcuts are
-// handled in archive.js.
+// handled in archive.js. + and - change the display scale.
 function keyPressed(event) {
   userStartAudio();
   if (event && (event.metaKey || event.ctrlKey)) return;
@@ -361,6 +400,14 @@ function keyPressed(event) {
   }
   if (key === 'a' || key === 'A') {
     toggleAttractMode();
+  }
+  if (key === '+' || key === '=') {
+    changeDisplayScale(1);
+    return false;
+  }
+  if (key === '-' || key === '_') {
+    changeDisplayScale(-1);
+    return false;
   }
 }
 
