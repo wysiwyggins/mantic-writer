@@ -14,3 +14,6 @@ canvas {
   display: block;
   image-rendering: pixelated; 
 }
+canvas.inverted {
+  filter: invert(1);
+}

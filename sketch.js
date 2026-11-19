@@ -92,12 +92,19 @@ function setup() {
   buildUniqueTiles();
   updateGridSize();
   createCanvas(CANVAS_COLS * globalVars.TILE_WIDTH, CANVAS_ROWS * globalVars.TILE_HEIGHT);
+  // One canvas pixel per tile pixel, even on high-DPI screens: CSS enlarges
+  // it (pixelated), so a 2x screen doesn't mean drawing 4x the pixels.
+  pixelDensity(1);
+  // Nothing on screen changes faster than ~20 times a second (tile placement,
+  // quickening steps), so 30fps looks the same as 60 at half the work.
+  frameRate(30);
   // On high-DPI screens each 40x30 tile is scaled up, and smoothing would
   // sample the neighbouring glyph on the spritesheet, leaving faint lines
   // around tiles. Nearest-neighbour keeps the scaling exact.
   noSmooth();
   applyDisplayScale();
   reverb = new p5.Reverb();
+  reverb.set(1, 3); // build the impulse once (1 s, decay 3); process() then just connects
   setupTraceryGrammar();
   startBoot();       // boot.js: title screen; the first figure follows it
   setupChordInput(); // input.js: MIDI chords from the Nano ESP32 or a MIDI keyboard
@@ -141,9 +148,6 @@ function draw() {
   }
   drawArchiveMessage(); // archive.js: brief notices such as "SAVED"
   drawVariationIndicator(); // input.js: knob zone, shown briefly while turning
-  if (shouldInvertColors) {
-    filter(INVERT);
-  }
 }
 
 // Pick a seed when none is given (mouse click, space bar, first load).
@@ -209,6 +213,10 @@ function initializeSketch(seed) {
   tintcolor = color(300 - red(baseColor), 300 - green(baseColor), 300 - blue(baseColor));
   
   shouldInvertColors = rnd() < 0.1;
+  // Inverted figures are flipped by CSS (canvas.inverted in style.css), which
+  // the GPU does for free. p5's filter(INVERT) would copy the whole canvas
+  // through WebGL and back on every frame.
+  document.querySelector('canvas').classList.toggle('inverted', shouldInvertColors);
 
   updateBodyBackground();
 
@@ -221,7 +229,7 @@ function playRandomSound() {
   let randomRate = rnd(0.5, 2.0);
   randomSound.rate(randomRate);
   randomSound.play();
-  reverb.process(randomSound, 1, 3);
+  reverb.process(randomSound); // impulse set in setup(); rebuilding it per figure stalls audio
 }
 
 function placeNextTile() {
@@ -306,6 +314,10 @@ function drawTile(tile, sheet) {
   let sy = tile.coords[1] * globalVars.TILE_HEIGHT;
   let dx = tile.pos.x;
   let dy = tile.pos.y;
+  if (!tile.flipH && !tile.flipV) { // most tiles: no transform needed
+    image(sheet, dx, dy, globalVars.TILE_WIDTH, globalVars.TILE_HEIGHT, sx, sy, globalVars.TILE_WIDTH, globalVars.TILE_HEIGHT);
+    return;
+  }
   push();
   translate(dx + globalVars.TILE_HALF_WIDTH, dy + globalVars.TILE_HALF_HEIGHT);
   if (tile.flipH) scale(-1, 1);
@@ -319,7 +331,7 @@ function randomizeBackgroundColor() {
 }
 
 // Match the page background to the canvas so the letterbox area blends in.
-// When the frame is inverted, filter(INVERT) flips the canvas, so invert here too.
+// When the frame is inverted, CSS flips the canvas, so invert here too.
 function updateBodyBackground() {
   let r = red(baseColor), g = green(baseColor), b = blue(baseColor);
   if (shouldInvertColors) {
