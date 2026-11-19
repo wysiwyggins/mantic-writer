@@ -3,9 +3,9 @@
 A p5.js sketch that draws a divination figure from no known system: a cluster of
 glyphs, a background colour, a sound, and a name. In the installation, visitors
 touch a chord of copper pads. The set of pads touched becomes a **seed**, and the
-same chord always produces the same figure, like a fixed lexicon. A knob picks
-one of 8 variations of each chord, so every chord has a family of related
-figures.
+same chord always produces the same figure that day, like a lexicon that
+changes daily. A knob picks one of 8 variations of each chord, so every chord
+has a family of related figures.
 
 ```text
 copper pads → Arduino Nano ESP32 ──USB-C (MIDI)──▶ Raspberry Pi 5 ──HDMI──▶ screen / projector + speakers
@@ -228,7 +228,10 @@ so that `~/mantic-writer/index.html` exists.
 ### 3. Serve it locally
 
 Web MIDI only works on `localhost` or https, so the sketch must be served rather
-than opened as a file. Create `~/.config/systemd/user/mantic-server.service`:
+than opened as a file. `serve.py` in this folder is a small web server that
+also tells Chromium not to cache the files, so copying new files onto the Pi
+takes effect at the next reload or reboot. Create
+`~/.config/systemd/user/mantic-server.service`:
 
 ```ini
 [Unit]
@@ -236,7 +239,7 @@ Description=Mantic Writer local web server
 
 [Service]
 WorkingDirectory=%h/mantic-writer
-ExecStart=/usr/bin/python3 -m http.server 8000 --bind 127.0.0.1
+ExecStart=/usr/bin/python3 %h/mantic-writer/serve.py 8000
 Restart=always
 
 [Install]
@@ -250,6 +253,9 @@ systemctl --user enable --now mantic-server
 sudo loginctl enable-linger $USER
 curl -s localhost:8000 | head -3   # should print the start of index.html
 ```
+
+If you change the service file later, run
+`systemctl --user daemon-reload && systemctl --user restart mantic-server`.
 
 ### 4. Grant MIDI permission (once)
 
@@ -287,7 +293,7 @@ figures. Press **Alt-F4** to leave kiosk mode.
 
 | Input | Action |
 | --- | --- |
-| Touch a chord of pads, then release all | Show that chord's figure (same chord → same figure, order doesn't matter) |
+| Touch a chord of pads, then release all | Show that chord's figure (same chord → same figure all day, order doesn't matter) |
 | The Nano's random button (D10) | A completely random figure, like a mouse click |
 | Turn the knob | Choose one of 8 variations. A row of 8 marks near the bottom of the screen shows the current zone while the knob turns. The next chord uses that variation, and the figure on screen redraws as it once the knob stops |
 | Ctrl-S (Cmd-S on a Mac) | Save the figure on screen |
@@ -305,6 +311,15 @@ Other zones add a suffix, e.g. `48.50.53~3`. The number of zones is
 `VARIATIONS` in `input.js`. If you change it, every zone except 0 gives
 different figures, so saved variations won't match their places on the knob
 any more.
+
+**Daily figures**: the date is also part of the seed, e.g.
+`48.50.53~3@2026-11-18`, so each chord shows a different figure each day and
+the same figure all day. The figure changes at midnight by the Pi's clock. Saved
+seeds keep their date, so they still come back exactly, and seeds saved before
+this was added (with no date) still work. Pre-made arrangements show on every
+day. Set `DAILY_SEEDS` in `input.js` to `false` to turn this off. The Pi needs
+the right date: it sets its clock from the internet, and without a network it
+only keeps time across power-offs if the Pi 5's RTC battery is fitted.
 
 **Pre-made arrangements**: a few chords show a hand-made arrangement from
 `assets/tilemaps/` instead of a generated one. Touching pad 0 alone shows

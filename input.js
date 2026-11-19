@@ -15,8 +15,15 @@
 //
 // The Nano's second button (CC 65) shows a completely random figure, like a
 // mouse click.
+//
+// With DAILY_SEEDS on, the date is added to every chord seed
+// ("48.50.53~3@2026-11-18"), so each chord shows a different figure each day
+// and the same figure all day. The date is part of the saved seed, so saved
+// figures still come back exactly. Seeds saved without a date (before this
+// existed) also still come back unchanged.
 
 const ATTRACT_TOGGLE_CC = 64;  // Nano's attract-mode button (sent as CC 64)
+const DAILY_SEEDS = true;      // false: a chord shows the same figure every day
 const RANDOM_CC = 65;          // Nano's random-figure button (must match RANDOM_CC in the firmware)
 const VARIATION_CC = 1;         // Nano's potentiometer (must match POT_CC in the firmware)
 const VARIATIONS = 8;          // how many knob positions; changing this changes which figure each position gives
@@ -94,7 +101,7 @@ function knobMoved(value) {
     let base = chordBase(currentSeed);
     if (base === null) return;      // random test figure, nothing to vary
     stopAttractMode();              // a visitor turned the knob
-    initializeSketch(withVariation(base));
+    initializeSketch(chordSeed(base));
   }, VARIATION_SETTLE);
 }
 
@@ -133,7 +140,7 @@ function noteActivity() {
 function finishChord() {
   clearTimeout(stuckTimer);
   if (chordNotes.size === 0) return;
-  let seed = withVariation(chordToSeed(chordNotes));
+  let seed = chordSeed(chordToSeed(chordNotes));
   chordNotes.clear();
   noteUserActivity(); // archive.js: resets the idle timer for attract mode
   initializeSketch(seed);
@@ -158,12 +165,21 @@ function drawVariationIndicator() {
   }
 }
 
-function withVariation(base) {
-  return variation === 0 ? base : `${base}~${variation}`;
+// The full seed for a chord: knob variation, then today's date.
+function chordSeed(base) {
+  let seed = variation === 0 ? base : `${base}~${variation}`;
+  return DAILY_SEEDS ? `${seed}@${todayString()}` : seed;
 }
 
-// "48.50.53~3" -> "48.50.53"; null for seeds that didn't come from a chord.
+// The Pi's local date, e.g. "2026-11-18". Figures change at local midnight.
+function todayString() {
+  let d = new Date();
+  let pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// "48.50.53~3@2026-11-18" -> "48.50.53"; null for seeds that didn't come from a chord.
 function chordBase(seed) {
-  let match = /^(\d+(?:\.\d+)*)(?:~\d+)?$/.exec(seed || '');
+  let match = /^(\d+(?:\.\d+)*)(?:~\d+)?(?:@\d{4}-\d{2}-\d{2})?$/.exec(seed || '');
   return match ? match[1] : null;
 }
