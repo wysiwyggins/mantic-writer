@@ -50,7 +50,7 @@ function saveCurrentSeed() {
     showArchiveMessage('ALREADY SAVED');
     return;
   }
-  list.push({ seed: currentSeed, name: figureName, savedAt: new Date().toISOString() });
+  list.push({ seed: currentSeed, name: isQuickening() ? quickening.name : figureName, savedAt: new Date().toISOString() });
   storeSavedSeeds(list);
   console.log(`Saved seed ${currentSeed} (${list.length} saved)`);
   showArchiveMessage(`SAVED ${list.length}`);
@@ -147,6 +147,7 @@ function toggleAttractMode() {
 }
 
 function showNextSavedSeed() {
+  if (isQuickening()) return; // let a quickening figure finish its minute
   let list = loadSavedSeeds(); // re-read so saves made meanwhile are included
   if (list.length === 0) {
     stopAttractMode();

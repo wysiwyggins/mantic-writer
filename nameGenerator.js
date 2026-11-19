@@ -156,10 +156,8 @@ function setupTraceryGrammar() {
 }
 
 function generateFigureName() {
-  console.log("Generating figure name...");
   try {
     const name = traceryGrammar.flatten("#figure#");
-    console.log("Generated figure name:", name);
     return name;
   } catch (error) {
     console.error("Error generating figure name:", error);

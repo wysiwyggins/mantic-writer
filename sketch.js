@@ -25,7 +25,11 @@ function preload() {
   }
   preloadCorporaFiles();
   preloadTilemaps(); // tilemaps.js
-   
+}
+
+// One tile name per distinct glyph (several names share a glyph), keyed by
+// "col,row". Built in setup(): in preload() the JSON hasn't arrived yet.
+function buildUniqueTiles() {
   let uniqueTiles = {};
   for (let key in spritesheetData.tiles) {
     let coords = spritesheetData.tiles[key].toString();
@@ -34,6 +38,15 @@ function preload() {
     }
   }
   spritesheetData.uniqueTiles = uniqueTiles;
+  spritesheetData.glyphList = Object.values(uniqueTiles); // one tile name per distinct glyph
+}
+
+// Text can carry any glyph from the spritesheet as a private-use character
+// (U+E000 + its index in glyphList). quicken.js uses these to glitch titles.
+const GLYPH_CHAR_BASE = 0xE000;
+
+function glyphChar(index) {
+  return String.fromCharCode(GLYPH_CHAR_BASE + index);
 }
 
 // Display scale: each tile is drawn this many times larger on screen, so a
@@ -76,6 +89,7 @@ function applyDisplayScale() {
 }
 
 function setup() {
+  buildUniqueTiles();
   updateGridSize();
   createCanvas(CANVAS_COLS * globalVars.TILE_WIDTH, CANVAS_ROWS * globalVars.TILE_HEIGHT);
   // On high-DPI screens each 40x30 tile is scaled up, and smoothing would
@@ -85,7 +99,7 @@ function setup() {
   applyDisplayScale();
   reverb = new p5.Reverb();
   setupTraceryGrammar();
-  initializeSketch();
+  startBoot();       // boot.js: title screen; the first figure follows it
   setupChordInput(); // input.js: MIDI chords from the Nano ESP32 or a MIDI keyboard
   setupArchive();    // archive.js: saved seeds and attract mode
 }
@@ -107,14 +121,20 @@ function refitCanvas() {
   resizeCanvas(CANVAS_COLS * globalVars.TILE_WIDTH, CANVAS_ROWS * globalVars.TILE_HEIGHT);
   noSmooth(); // resizing can reset the canvas context's settings
   applyDisplayScale();
+  if (booting) return; // boot.js redraws to fit; no figure to lay out yet
   // Existing tile positions may fall outside the new grid, so lay the same figure out again.
   initializeSketch(currentSeed);
 }
 
 function draw() {
+  if (booting) {
+    drawBoot(); // boot.js
+    return;
+  }
   background(baseColor);
+  let sheet = tintedSpritesheet();
   for (let tile of tiles) {
-    drawTile(tile);
+    drawTile(tile, sheet);
   }
   if (figureName) {
     displayFigureName(figureName);
@@ -144,6 +164,8 @@ function rnd(a, b) {
 // inversion, sound and (via the layout) the name. Some chords show a
 // pre-made arrangement instead of a generated layout (tilemaps.js).
 function initializeSketch(seed) {
+  endBoot(); // boot.js: any figure (chord, key, click, attract mode) ends the boot screen
+  stopQuickening(); // quicken.js
   // Stop any tile placement still running from the previous figure.
   clearTimeout(placementTimeout);
   placementTimeout = null;
@@ -231,6 +253,7 @@ function placeNextTile() {
   } else {
     playRandomSound(); 
     figureName = premadeTiles ? tilemapTitle(currentSeed) : generateFigureNameFromTiles(); 
+    maybeQuicken(currentSeed); // quicken.js: rarely, the figure comes alive
   }
 }
 
@@ -256,7 +279,29 @@ function findRandomAdjacentPosition(usedPositions) {
   return rnd(validPositions);
 }
 
-function drawTile(tile) {
+// p5 (1.9) re-tints the whole spritesheet on every tinted image() call, so
+// keep one tinted copy and redo it only when the tint colour changes. This
+// matters with hundreds of tiles on screen (quicken.js).
+let tintedSheet = null;
+let tintedSheetKey = '';
+
+function tintedSpritesheet() {
+  let k = tintcolor.toString();
+  if (k !== tintedSheetKey) {
+    if (!tintedSheet) {
+      tintedSheet = createGraphics(spritesheet.width, spritesheet.height);
+      tintedSheet.pixelDensity(1);
+      tintedSheet.noSmooth();
+    }
+    tintedSheet.clear();
+    tintedSheet.tint(tintcolor);
+    tintedSheet.image(spritesheet, 0, 0);
+    tintedSheetKey = k;
+  }
+  return tintedSheet;
+}
+
+function drawTile(tile, sheet) {
   let sx = tile.coords[0] * globalVars.TILE_WIDTH;
   let sy = tile.coords[1] * globalVars.TILE_HEIGHT;
   let dx = tile.pos.x;
@@ -265,8 +310,7 @@ function drawTile(tile) {
   translate(dx + globalVars.TILE_HALF_WIDTH, dy + globalVars.TILE_HALF_HEIGHT);
   if (tile.flipH) scale(-1, 1);
   if (tile.flipV) scale(1, -1);
-  tint(tintcolor); // Apply tint before drawing the tile
-  image(spritesheet, -globalVars.TILE_HALF_WIDTH, -globalVars.TILE_HALF_HEIGHT, globalVars.TILE_WIDTH, globalVars.TILE_HEIGHT, sx, sy, globalVars.TILE_WIDTH, globalVars.TILE_HEIGHT);
+  image(sheet, -globalVars.TILE_HALF_WIDTH, -globalVars.TILE_HALF_HEIGHT, globalVars.TILE_WIDTH, globalVars.TILE_HEIGHT, sx, sy, globalVars.TILE_WIDTH, globalVars.TILE_HEIGHT);
   pop();
 }
 
@@ -332,9 +376,11 @@ function displayText(name, startY, isInverted) {
   }
 }
 
-function displayTile(char, col, row) {
+function displayTile(char, col, row, sheet = spritesheet) {
   let tilePos;
-  switch (char) {
+  let glyph = spritesheetData.glyphList[char.charCodeAt(0) - GLYPH_CHAR_BASE];
+  switch (glyph ? '' : char) {
+    case '': tilePos = glyph; break;
     case 'š': tilePos = "LATIN_SMALL_LETTER_S_WITH_CARON"; break;
     case 'Š': tilePos = "LATIN_CAPITAL_LETTER_S_WITH_CARON"; break;
     case '!': tilePos = "EXCLAMATION_MARK"; break;
@@ -379,7 +425,7 @@ function displayTile(char, col, row) {
   if (tilePos && spritesheetData.tiles[tilePos]) {
     let sx = spritesheetData.tiles[tilePos][0] * globalVars.TILE_WIDTH;
     let sy = spritesheetData.tiles[tilePos][1] * globalVars.TILE_HEIGHT;
-    image(spritesheet, col, row, globalVars.TILE_WIDTH, globalVars.TILE_HEIGHT, sx, sy, globalVars.TILE_WIDTH, globalVars.TILE_HEIGHT);
+    image(sheet, col, row, globalVars.TILE_WIDTH, globalVars.TILE_HEIGHT, sx, sy, globalVars.TILE_WIDTH, globalVars.TILE_HEIGHT);
   } else {
     console.error(`No tile mapping found for character: ${char}`);
   }
@@ -389,7 +435,8 @@ function displayTile(char, col, row) {
 // so resume it from inside those handlers. (Electron allows audio from the start.)
 // Space/Enter or a click starts a random figure (handy for testing; the
 // installation itself is driven by MIDI chords). Cmd/Ctrl shortcuts are
-// handled in archive.js. + and - change the display scale.
+// handled in archive.js. + and - change the display scale. Q shows a
+// figure that quickens (quicken.js), which otherwise happens rarely.
 function keyPressed(event) {
   userStartAudio();
   if (event && (event.metaKey || event.ctrlKey)) return;
@@ -400,6 +447,11 @@ function keyPressed(event) {
   }
   if (key === 'a' || key === 'A') {
     toggleAttractMode();
+  }
+  if (key === 'q' || key === 'Q') {
+    stopAttractMode();
+    initializeSketch(randomQuickeningSeed()); // quicken.js: test the rare animation
+    return false;
   }
   if (key === '+' || key === '=') {
     changeDisplayScale(1);
