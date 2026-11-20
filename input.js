@@ -28,7 +28,8 @@ const RANDOM_CC = 65;          // Nano's random-figure button (must match RANDOM
 const VARIATION_CC = 1;         // Nano's potentiometer (must match POT_CC in the firmware)
 const VARIATIONS = 8;          // how many knob positions; changing this changes which figure each position gives
 const VARIATION_SETTLE = 400;  // ms the knob must rest before the figure on screen is redrawn
-const INDICATOR_DURATION = 1500; // ms the zone indicator stays up after the knob last moved
+const INDICATOR_DURATION = 3000; // ms the knob slider stays up after the knob last moved
+const SLIDER_LENGTH = 16;      // tiles across the knob slider, ends included
 const STUCK_NOTE_TIMEOUT = 5000; // ms without MIDI activity before a stuck gesture is closed
 
 let heldNotes = new Set();   // notes currently down
@@ -37,7 +38,36 @@ let stuckTimer = null;
 let variation = 0;           // current knob position, 0..VARIATIONS-1
 let variationTimer = null;
 let lastKnobValue = null;    // last CC value received, to tell real turns from re-sends
-let indicatorUntil = 0;      // millis() until which the zone indicator is shown
+let indicatorUntil = 0;      // millis() until which the knob slider is shown
+let padTilesShown = new Set(); // notes whose tiles are on screen (see drawPadTiles)
+let padTilesUntil = 0;       // millis() until which the last gesture's tiles stay up
+
+// Where each pad sits on the hands, and the glyph shown when it is touched.
+// col: tile columns left (-) or right (+) of the screen centre;
+// row: 0 = finger row, 1 = palm row just below it.
+// Fingers carry their palmistry mounts (index Jupiter, middle Saturn, ring
+// Apollo, little Mercury, thumb Venus); palm contacts are the Moon (little-
+// finger side) and Taurus (thumb side, ruled by Venus).
+// Change the note numbers here if the pads are wired in a different order.
+const PAD_TILES = {
+  // left hand, little finger to thumb, then palm
+  48: { glyph: 'MERCURY',       col: -7, row: 0 },
+  49: { glyph: 'APOLLO',        col: -6, row: 0 },
+  50: { glyph: 'SATURN',        col: -5, row: 0 },
+  51: { glyph: 'JUPITER',       col: -4, row: 0 },
+  52: { glyph: 'FEMALE_SYMBOL', col: -3, row: 0 },
+  53: { glyph: 'LAST_QUARTER_MOON', col: -6, row: 1 },
+  54: { glyph: 'TAURUS',        col: -4, row: 1 },
+  // right hand, thumb to little finger, then palm
+  55: { glyph: 'FEMALE_SYMBOL', col: 3, row: 0 },
+  56: { glyph: 'JUPITER',       col: 4, row: 0 },
+  57: { glyph: 'SATURN',        col: 5, row: 0 },
+  58: { glyph: 'APOLLO',        col: 6, row: 0 },
+  59: { glyph: 'MERCURY',       col: 7, row: 0 },
+  60: { glyph: 'TAURUS',        col: 4, row: 1 },
+  61: { glyph: 'LAST_QUARTER_MOON', col: 6, row: 1 },
+};
+const PAD_TILES_LINGER = 500; // ms the tiles stay up after the gesture ends, so a quick tap is still seen
 
 function setupChordInput() {
   if (!navigator.requestMIDIAccess) {
@@ -81,7 +111,8 @@ function handleMIDIMessage(message) {
 // neighbouring position, keep the current one so a jittery pot doesn't flicker.
 function knobMoved(value) {
   // The Nano re-sends the knob at the start of every touch; only show the
-  // indicator when the knob has actually been turned.
+  // slider when the knob has actually been turned. Each move keeps it up for
+  // another INDICATOR_DURATION, so it hides once the knob is at rest.
   if (lastKnobValue !== null && Math.abs(value - lastKnobValue) > 1) {
     indicatorUntil = millis() + INDICATOR_DURATION;
   }
@@ -113,6 +144,7 @@ function noteDown(note) {
   noteActivity();
   heldNotes.add(note);
   chordNotes.add(note);
+  padTilesShown = chordNotes;
 }
 
 function noteUp(note) {
@@ -141,6 +173,8 @@ function finishChord() {
   clearTimeout(stuckTimer);
   if (chordNotes.size === 0) return;
   let seed = chordSeed(chordToSeed(chordNotes));
+  padTilesShown = new Set(chordNotes); // keep the finished gesture's tiles up briefly
+  padTilesUntil = millis() + PAD_TILES_LINGER;
   chordNotes.clear();
   noteUserActivity(); // archive.js: resets the idle timer for attract mode
   initializeSketch(seed);
@@ -151,17 +185,37 @@ function chordToSeed(notes) {
   return [...notes].sort((a, b) => a - b).join('.');
 }
 
-// Called from draw(): a row of VARIATIONS glyphs near the bottom of the
-// screen, the current zone as a solid block and the others as dots, so
-// visitors can see where they are on a smooth knob.
+// Called from draw(): a slider along the bottom row, a box-drawing line with
+// a bullet for the knob, so visitors can see where the knob is turned to.
 function drawVariationIndicator() {
-  if (millis() >= indicatorUntil) return;
+  if (millis() >= indicatorUntil || lastKnobValue === null) return;
   let w = globalVars.TILE_WIDTH, h = globalVars.TILE_HEIGHT;
-  let left = Math.floor((CANVAS_COLS - VARIATIONS) / 2) * w;
-  let y = height - 2 * h;
-  for (let i = 0; i < VARIATIONS; i++) {
-    let coords = spritesheetData.tiles[i === variation ? 'FULL_BLOCK' : 'MIDDLE_DOT'];
+  let left = Math.floor((CANVAS_COLS - SLIDER_LENGTH) / 2) * w;
+  let y = height - h;
+  let knobAt = Math.round(lastKnobValue / 127 * (SLIDER_LENGTH - 1));
+  for (let i = 0; i < SLIDER_LENGTH; i++) {
+    let key = i === knobAt ? 'BULLET'
+      : i === 0 ? 'BOX_RIGHT_VERTICAL'               // ├
+      : i === SLIDER_LENGTH - 1 ? 'BOX_LEFT_VERTICAL' // ┤
+      : 'BOX_HORIZONTAL';
+    let coords = spritesheetData.tiles[key];
     image(spritesheet, left + i * w, y, w, h, coords[0] * w, coords[1] * h, w, h);
+  }
+}
+
+// Called from draw(): one tile per pad touched in the current gesture, placed
+// under where that finger or palm rests (PAD_TILES). Shown while the gesture
+// is open and for PAD_TILES_LINGER ms after the figure is set.
+function drawPadTiles(sheet) {
+  if (heldNotes.size === 0 && millis() >= padTilesUntil) return;
+  let w = globalVars.TILE_WIDTH, h = globalVars.TILE_HEIGHT;
+  let centre = Math.floor(CANVAS_COLS / 2);
+  let top = height - 3 * h;
+  for (let note of padTilesShown) {
+    let pad = PAD_TILES[note];
+    if (!pad) continue; // a keyboard note with no pad
+    let coords = spritesheetData.tiles[pad.glyph];
+    image(sheet, (centre + pad.col) * w, top + pad.row * h, w, h, coords[0] * w, coords[1] * h, w, h);
   }
 }
 

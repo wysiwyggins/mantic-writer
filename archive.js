@@ -11,6 +11,7 @@
 // itself after a stretch with no visitors, and stops on any touch.
 
 const STORAGE_KEY = 'manticSeeds';
+const ATTRACT_ENABLED = false;            // false disables attract mode entirely (manual and idle)
 const ATTRACT_INTERVAL = 12000;          // ms each saved figure stays up
 const IDLE_BEFORE_ATTRACT = 3 * 60000;   // ms without input before attract mode starts
 
@@ -120,7 +121,7 @@ function isAttractMode() {
 }
 
 function startAttractMode() {
-  if (isAttractMode()) return;
+  if (!ATTRACT_ENABLED || isAttractMode()) return;
   if (loadSavedSeeds().length === 0) {
     showArchiveMessage('NOTHING SAVED');
     return;
@@ -161,6 +162,7 @@ function showNextSavedSeed() {
 // Any visitor input restarts the countdown to attract mode.
 function noteUserActivity() {
   clearTimeout(idleTimer);
+  if (!ATTRACT_ENABLED) return;
   idleTimer = setTimeout(() => {
     if (!isAttractMode() && loadSavedSeeds().length > 0) startAttractMode();
   }, IDLE_BEFORE_ATTRACT);

@@ -141,7 +141,7 @@ Reboot: the sketch comes up full-screen after its title screen. **Alt-F4** leave
 | --- | --- |
 | Touch a chord of pads, then release all | Show that chord's figure (order doesn't matter) |
 | Random button (D10), Space, Enter or click | A random figure |
-| Turn the knob | Choose one of 8 variations. Marks near the bottom show the zone while turning; the figure on screen redraws once the knob stops |
+| Turn the knob | Choose one of 8 variations. A slider along the bottom shows the knob position while turning (hidden 3 s after it stops); the figure on screen redraws once the knob stops |
 | Ctrl/Cmd-S | Save the figure on screen |
 | Ctrl/Cmd-Backspace | Remove the figure on screen from the saved list |
 | Ctrl/Cmd-E | Download the saved list as JSON |
@@ -158,7 +158,7 @@ Reboot: the sketch comes up full-screen after its title screen. **Alt-F4** leave
 
 **Pre-made arrangements**: pad 0 alone shows *royalty*, pad 1 *ramparts*, pad 2 *the pit*, titled by file name. The knob still changes their colour, inversion and sound. To add one, draw a map in Tiled with `assets/spritesheets/libuse40x30-cp437.png` (40×30 tiles, 23 columns), save it as `.tmj` in `assets/tilemaps/`, and add its chord to `TILEMAP_CHORDS` in `tilemaps.js` (sorted notes joined by dots: pads 0 and 3 are `'48.51'`). Flipped tiles work; rotated tiles are drawn unrotated.
 
-**Attract mode** cycles through saved figures every 12 seconds, starts by itself after 3 minutes without input (if anything is saved), and stops on any touch. Timings are in `archive.js`.
+**Attract mode** cycles through saved figures every 12 seconds, starts by itself after 3 minutes without input (if anything is saved), and stops on any touch. Timings are in `archive.js`; set `ATTRACT_ENABLED` to `false` there to turn attract mode off completely.
 
 **Saved figures** live in the browser's local storage, which survives reboots but is per-browser. To move figures from a Mac, export with Cmd-E and drag the file onto the sketch on the Pi. Export a backup before the show.
 

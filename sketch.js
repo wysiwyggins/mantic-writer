@@ -148,6 +148,8 @@ function draw() {
   }
   drawArchiveMessage(); // archive.js: brief notices such as "SAVED"
   drawVariationIndicator(); // input.js: knob zone, shown briefly while turning
+  drawPadTiles(sheet); // input.js: a glyph for each pad touched in the gesture
+  drawPlanetaryHour(); // planetaryHours.js: the current planetary hour, top row
 }
 
 // Pick a seed when none is given (mouse click, space bar, first load).
