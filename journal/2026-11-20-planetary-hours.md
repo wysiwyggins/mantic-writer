@@ -4,7 +4,7 @@ date: 2026-11-20
 author: "Wiley Wiggins"
 ---
 
-# planetary time
+# planetary hours
 
 Without a clock prop, I decided to add a clock to the UI, every hour the month, day and a symbol representing "planetary hour" (astrological sign)
 
