@@ -19,3 +19,5 @@ Carnival "tester" machines:
 cardboard prototype:
 
 ![cardboard prototype, nut caps arranged like fingertips](./images/IMG_6430.jpg)
+
+As much as I would like to make something nice, for this party I might just find a random plastic container and drill some holes in it. There's not enough time and I don't have access to tools or supplies at the moment. You need to book a consultation at the Concordia woodshop and the regular maker space doesn't have a cnc or laser cutter.
