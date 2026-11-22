@@ -1,11 +1,12 @@
 // Boot screen, after the "boot" sketch in Didaktik Gama: a flat field of
 // colour that, every few seconds, flashes alternating stripes in a new
 // colour and its complements while two low oscillators jump in pitch.
+// This was a reference to Atari ST disc loading screens (sort of)
 // The title and credit sit along the bottom in spritesheet glyphs.
 // Ends after BOOT_DURATION, or as soon as a figure starts (chord, key,
 // click, attract mode): initializeSketch() calls endBoot().
 
-const BOOT_TITLE = 'Mantic Reader';
+const BOOT_TITLE = 'Mantic Writer';
 const BOOT_CREDIT = 'Wiley Wiggins 2026';
 const BOOT_DURATION = 12000;    // ms before the first figure appears
 const BOOT_CYCLE = 4000;        // ms between colour changes (120 frames at 30fps in the original)

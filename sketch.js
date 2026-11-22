@@ -5,7 +5,7 @@ let CANVAS_ROWS;
 let shouldInvertColors = false;
 let figureName = '';
 let currentSeed = null; // the seed that produced the figure on screen
-let rng = Math.random;  // per-figure seeded generator, replaced in initializeSketch()
+let rng = Math.random;  // per-figure seeded generator, replaced in showFigure()
 let tileKeys = [];
 let numTiles = 0;
 let usedPositions = [];
@@ -16,6 +16,14 @@ let premadeTiles = null; // tiles of a pre-made arrangement being placed (tilema
 
 const tilePlacementDelayNormal = 50; 
 const tilePlacementDelayInverted = 0; 
+
+// Once a figure is complete it stays up for at least FIGURE_HOLD ms. A new
+// figure asked for while one is being drawn or held waits until the hold
+// ends; if several are asked for meanwhile, only the latest is shown.
+const FIGURE_HOLD = 1000;
+let figureHoldUntil = 0;     // millis() when a new figure may appear; Infinity while drawing
+let pendingFigure = null;    // { seed } waiting for the hold to end, or null
+let figureHoldTimer = null;
 
 function preload() {
   spritesheet = loadImage(globalVars.SPRITESHEET_PATH);
@@ -130,7 +138,8 @@ function refitCanvas() {
   applyDisplayScale();
   if (booting) return; // boot.js redraws to fit; no figure to lay out yet
   // Existing tile positions may fall outside the new grid, so lay the same figure out again.
-  initializeSketch(currentSeed);
+  // (Not a new figure, so it skips the hold.)
+  showFigure(currentSeed);
 }
 
 function draw() {
@@ -166,10 +175,38 @@ function rnd(a, b) {
   return a + r * (b - a);
 }
 
+// Ask for a figure (chord, key, click, attract mode). Shown at once unless
+// the figure on screen is still being drawn or within its FIGURE_HOLD.
+function initializeSketch(seed) {
+  if (booting || millis() >= figureHoldUntil) {
+    pendingFigure = null;
+    showFigure(seed);
+    return;
+  }
+  pendingFigure = { seed };
+  scheduleFigureHold();
+}
+
+// Show the pending figure when the hold ends. While a figure is still being
+// drawn its hold hasn't started; placeNextTile() calls this once it's done.
+function scheduleFigureHold() {
+  clearTimeout(figureHoldTimer);
+  figureHoldTimer = null;
+  if (!pendingFigure || figureHoldUntil === Infinity) return;
+  figureHoldTimer = setTimeout(() => {
+    let next = pendingFigure;
+    pendingFigure = null;
+    if (next) showFigure(next.seed);
+  }, Math.max(0, figureHoldUntil - millis()));
+}
+
 // The seed fully determines the figure: glyphs, flips, layout, colour,
 // inversion, sound and (via the layout) the name. Some chords show a
 // pre-made arrangement instead of a generated layout (tilemaps.js).
-function initializeSketch(seed) {
+function showFigure(seed) {
+  clearTimeout(figureHoldTimer);
+  figureHoldTimer = null;
+  figureHoldUntil = Infinity; // the hold starts once the figure is complete
   endBoot(); // boot.js: any figure (chord, key, click, attract mode) ends the boot screen
   stopQuickening(); // quicken.js
   // Stop any tile placement still running from the previous figure.
@@ -264,6 +301,8 @@ function placeNextTile() {
     playRandomSound(); 
     figureName = premadeTiles ? tilemapTitle(currentSeed) : generateFigureNameFromTiles(); 
     maybeQuicken(currentSeed); // quicken.js: rarely, the figure comes alive
+    figureHoldUntil = millis() + FIGURE_HOLD;
+    scheduleFigureHold(); // show any figure asked for while this one was drawn
   }
 }
 
