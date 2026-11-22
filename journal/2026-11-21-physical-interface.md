@@ -12,6 +12,10 @@ I picked up a birch board and a handful of bolts and cap nuts, with the thinking
 
 I added a one second hold after a figure is displayed to keep from just spamming results.
 
+Carnival "tester" machines:
+
+![love and strength testers](./images/IMG_6429.jpg)
+
 cardboard prototype:
 
 ![cardboard prototype, nut caps arranged like fingertips](./images/IMG_6430.jpg)
