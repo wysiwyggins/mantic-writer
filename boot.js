@@ -19,7 +19,7 @@ let bootCycle = -1;
 let bootColors = [];
 let bootStripeOffset = 0;
 let bootWave1, bootWave2;
-let bootWhiteSheet = null; // the spritesheet with its glyphs inverted to white
+let bootWhiteSheet = null; 
 
 function startBoot() {
   booting = true;
@@ -116,7 +116,7 @@ function drawBootText() {
 
 // Dark grounds get white text, as inverted figures do in the main sketch.
 function isDark(c) {
-  return 0.299 * red(c) + 0.587 * green(c) + 0.114 * blue(c) < 128;
+  return luminance(c) < 128; // sketch.js
 }
 
 // The glyphs are near-black, and tint() can only darken them, so white text

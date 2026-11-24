@@ -15,6 +15,7 @@ let settings = [];
 let seasons = [];
 let animals = [];
 let nouns = [];
+let skills = []; // loader.js: "TESTING ..." lines
 let traceryGrammar;
 
 function preloadCorporaFiles() {
@@ -77,6 +78,11 @@ function preloadCorporaFiles() {
   nouns = loadJSON('./assets/corpora/nouns.json', (data) => {
     nouns = data.nouns;
     console.log("Nouns loaded:", nouns);
+  });
+  // skills.json is a plain array; p5's loadJSON hands it back as an object.
+  skills = loadJSON('./assets/corpora/skills.json', (data) => {
+    skills = [...new Set(Object.values(data))];
+    console.log("Skills loaded:", skills.length);
   });
 }
 

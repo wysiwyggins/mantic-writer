@@ -1,7 +1,9 @@
 // planetaryHours.js
 // Shows today's date and the symbol of the current planetary hour's planet
-// in white at the top centre of the screen, e.g. "November 20 ♄", for
-// PLANETARY_HOUR_SHOWN after each planetary hour begins (and after startup).
+// at the top centre of the screen, e.g. "November 20 ♄", in white tinted
+// with the background's complement (complementWhiteSpritesheet() in
+// sketch.js), for PLANETARY_HOUR_SHOWN after each planetary hour begins
+// (and after startup).
 //
 // The day from sunrise to sunset is split into 12 equal hours, and the night
 // from sunset to the next sunrise into another 12, so hours are longer or
@@ -56,8 +58,11 @@ function drawPlanetaryHour() {
     planetaryHourCheckedAt = millis();
   }
   if (millis() >= planetaryHourShownUntil) return;
-  // Inverted frames are flipped by CSS, so black glyphs there end up white.
-  let sheet = shouldInvertColors ? spritesheet : whiteSpritesheet(); // boot.js
+  // White tinted with the background's complement (sketch.js). While loading,
+  // the loader's background; while quickening, the figure's original one, as
+  // its ground drifts every step and the sheet would be re-tinted each time.
+  let bg = loading ? loaderBg : isQuickening() ? quickening.baseColor : baseColor;
+  let sheet = complementWhiteSpritesheet(bg);
   let w = globalVars.TILE_WIDTH, h = globalVars.TILE_HEIGHT;
   // The date, a space, then the planet's symbol, centred as one line.
   let length = planetaryHourDate.length + (planetaryHourRuler ? 2 : 0);

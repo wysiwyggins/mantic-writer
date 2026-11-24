@@ -101,10 +101,20 @@ function handleMIDIMessage(message) {
     toggleAttractMode();
   } else if (type === 0xb0 && data1 === RANDOM_CC && data2 >= 64) {
     stopAttractMode(); // also restarts the idle timer
-    initializeSketch(); // no seed = a new random figure
+    initializeSketch(undefined, true); // no seed = a new random figure
   } else if (type === 0xb0 && data1 === VARIATION_CC) {
     knobMoved(data2);
   }
+}
+
+// For testing without the Nano: the arrow keys (sketch.js) turn the knob one
+// position left or right, as if it had been turned to the middle of that
+// position's range.
+function nudgeKnob(step) {
+  let zoneWidth = 128 / VARIATIONS;
+  let centre = v => Math.round((v + 0.5) * zoneWidth);
+  knobMoved(centre(constrain(variation + step, 0, VARIATIONS - 1)));
+  indicatorUntil = millis() + INDICATOR_DURATION; // show the slider even at either end
 }
 
 // Map a CC value (0-127) to a knob position. Near the boundary with the
@@ -129,7 +139,8 @@ function knobMoved(value) {
   clearTimeout(variationTimer);
   variationTimer = setTimeout(() => {
     if (heldNotes.size > 0) return; // the chord in progress will pick it up
-    let base = chordBase(currentSeed);
+    // During the loading screen, vary the chord about to be shown.
+    let base = chordBase(loading ? loaderSeed : currentSeed);
     if (base === null) return;      // random test figure, nothing to vary
     stopAttractMode();              // a visitor turned the knob
     initializeSketch(chordSeed(base));
@@ -177,7 +188,7 @@ function finishChord() {
   padTilesUntil = millis() + PAD_TILES_LINGER;
   chordNotes.clear();
   noteUserActivity(); // archive.js: resets the idle timer for attract mode
-  initializeSketch(seed);
+  initializeSketch(seed, true); // through the loading screen (loader.js)
 }
 
 // Sorted note numbers, e.g. "48.50.53". Order-independent and readable.
@@ -185,13 +196,14 @@ function chordToSeed(notes) {
   return [...notes].sort((a, b) => a - b).join('.');
 }
 
-// Called from draw(): a slider along the bottom row, a box-drawing line with
-// a bullet for the knob, so visitors can see where the knob is turned to.
+// Called from draw(): a slider one row above the bottom, a box-drawing line with
+// a bullet for the knob and Venus and Mars at the ends, so visitors can see
+// where the knob is turned to.
 function drawVariationIndicator() {
   if (millis() >= indicatorUntil || lastKnobValue === null) return;
   let w = globalVars.TILE_WIDTH, h = globalVars.TILE_HEIGHT;
   let left = Math.floor((CANVAS_COLS - SLIDER_LENGTH) / 2) * w;
-  let y = height - h;
+  let y = height - 2 * h; // second row from the bottom
   let knobAt = Math.round(lastKnobValue / 127 * (SLIDER_LENGTH - 1));
   for (let i = 0; i < SLIDER_LENGTH; i++) {
     let key = i === knobAt ? 'BULLET'
@@ -200,6 +212,12 @@ function drawVariationIndicator() {
       : 'BOX_HORIZONTAL';
     let coords = spritesheetData.tiles[key];
     image(spritesheet, left + i * w, y, w, h, coords[0] * w, coords[1] * h, w, h);
+  }
+  // Venus and Mars (the bow and arrow) mark the two ends, right against the slider.
+  let ends = [['FEMALE_SYMBOL', left - w], ['BOW_AND_ARROW', left + SLIDER_LENGTH * w]];
+  for (let [key, x] of ends) {
+    let coords = spritesheetData.tiles[key];
+    image(spritesheet, x, y, w, h, coords[0] * w, coords[1] * h, w, h);
   }
 }
 
@@ -210,7 +228,7 @@ function drawPadTiles(sheet) {
   if (heldNotes.size === 0 && millis() >= padTilesUntil) return;
   let w = globalVars.TILE_WIDTH, h = globalVars.TILE_HEIGHT;
   let centre = Math.floor(CANVAS_COLS / 2);
-  let top = height - 3 * h;
+  let top = height - 4 * h; // finger row; palm row below it, both above the knob slider
   for (let note of padTilesShown) {
     let pad = PAD_TILES[note];
     if (!pad) continue; // a keyboard note with no pad

@@ -22,7 +22,7 @@ const tilePlacementDelayInverted = 0;
 // ends; if several are asked for meanwhile, only the latest is shown.
 const FIGURE_HOLD = 1000;
 let figureHoldUntil = 0;     // millis() when a new figure may appear; Infinity while drawing
-let pendingFigure = null;    // { seed } waiting for the hold to end, or null
+let pendingFigure = null;    // { seed, withLoader } waiting for the hold to end, or null
 let figureHoldTimer = null;
 
 function preload() {
@@ -136,7 +136,7 @@ function refitCanvas() {
   resizeCanvas(CANVAS_COLS * globalVars.TILE_WIDTH, CANVAS_ROWS * globalVars.TILE_HEIGHT);
   noSmooth(); // resizing can reset the canvas context's settings
   applyDisplayScale();
-  if (booting) return; // boot.js redraws to fit; no figure to lay out yet
+  if (booting || loading) return; // boot.js and loader.js redraw to fit; no figure to lay out yet
   // Existing tile positions may fall outside the new grid, so lay the same figure out again.
   // (Not a new figure, so it skips the hold.)
   showFigure(currentSeed);
@@ -145,6 +145,14 @@ function refitCanvas() {
 function draw() {
   if (booting) {
     drawBoot(); // boot.js
+    return;
+  }
+  if (loading) { // loader.js: "TESTING ..." lines before the figure
+    let loaderSheet = loaderBackground();
+    drawLoader();
+    drawArchiveMessage();
+    drawPadTiles(loaderSheet);
+    drawPlanetaryHour();
     return;
   }
   background(baseColor);
@@ -177,14 +185,26 @@ function rnd(a, b) {
 
 // Ask for a figure (chord, key, click, attract mode). Shown at once unless
 // the figure on screen is still being drawn or within its FIGURE_HOLD.
-function initializeSketch(seed) {
-  if (booting || millis() >= figureHoldUntil) {
-    pendingFigure = null;
-    showFigure(seed);
+// withLoader: visitor requests (chords, random button, space/click) first
+// show the loading screen (loader.js). While it runs, any new request just
+// replaces the seed it will show.
+function initializeSketch(seed, withLoader = false) {
+  if (loading) {
+    loaderSeed = seed;
     return;
   }
-  pendingFigure = { seed };
+  if (booting || millis() >= figureHoldUntil) {
+    pendingFigure = null;
+    beginFigure(seed, withLoader);
+    return;
+  }
+  pendingFigure = { seed, withLoader };
   scheduleFigureHold();
+}
+
+function beginFigure(seed, withLoader) {
+  if (withLoader) startLoader(seed); // loader.js; calls showFigure() when done
+  else showFigure(seed);
 }
 
 // Show the pending figure when the hold ends. While a figure is still being
@@ -196,7 +216,7 @@ function scheduleFigureHold() {
   figureHoldTimer = setTimeout(() => {
     let next = pendingFigure;
     pendingFigure = null;
-    if (next) showFigure(next.seed);
+    if (next) beginFigure(next.seed, next.withLoader);
   }, Math.max(0, figureHoldUntil - millis()));
 }
 
@@ -204,6 +224,7 @@ function scheduleFigureHold() {
 // inversion, sound and (via the layout) the name. Some chords show a
 // pre-made arrangement instead of a generated layout (tilemaps.js).
 function showFigure(seed) {
+  stopLoader(); // loader.js
   clearTimeout(figureHoldTimer);
   figureHoldTimer = null;
   figureHoldUntil = Infinity; // the hold starts once the figure is complete
@@ -249,7 +270,7 @@ function showFigure(seed) {
     usedPositions.push(initialTile.pos);
   }
   
-  tintcolor = color(300 - red(baseColor), 300 - green(baseColor), 300 - blue(baseColor));
+  tintcolor = complementColor(baseColor);
   
   shouldInvertColors = rnd() < 0.1;
   // Inverted figures are flipped by CSS (canvas.inverted in style.css), which
@@ -374,11 +395,79 @@ function randomizeBackgroundColor() {
 // Match the page background to the canvas so the letterbox area blends in.
 // When the frame is inverted, CSS flips the canvas, so invert here too.
 function updateBodyBackground() {
-  let r = red(baseColor), g = green(baseColor), b = blue(baseColor);
-  if (shouldInvertColors) {
-    r = 255 - r; g = 255 - g; b = 255 - b;
+  let c = shouldInvertColors ? invertColor(baseColor) : baseColor;
+  document.body.style.backgroundColor = `rgb(${Math.round(red(c))}, ${Math.round(green(c))}, ${Math.round(blue(c))})`;
+}
+
+// The glyph tint for a background: its complement (300 minus each channel,
+// clamped to 255). Also used by loader.js.
+function complementColor(c) {
+  return color(300 - red(c), 300 - green(c), 300 - blue(c));
+}
+
+// What CSS inversion (canvas.inverted) turns a colour into.
+function invertColor(c) {
+  return color(255 - red(c), 255 - green(c), 255 - blue(c));
+}
+
+// Perceived brightness, 0 (black) to 255 (white).
+function luminance(c) {
+  return 0.299 * red(c) + 0.587 * green(c) + 0.114 * blue(c);
+}
+
+// Lettering in white tinted with the complement of the background, used for
+// the loading screen's lines (loader.js) and the date line (planetaryHours.js).
+// 0 = the background's full complement, 1 = plain white.
+const COMPLEMENT_WHITENESS = 0.5;
+// Least difference in luminance() between the tinted lettering and the
+// background. Closer than this (as on mid-grey grounds, whose complement is
+// another mid-grey) and the tint fades toward white until it reaches it. On
+// grounds so light that even white can't, it darkens instead.
+const COMPLEMENT_MIN_CONTRAST = 60;
+let complementSheet = null;
+let complementSheetKey = '';
+
+// White glyphs (boot.js) tinted with complementColor() of bg as seen on
+// screen, lightened toward white. An inverted figure's canvas is flipped by
+// CSS, so the tint is pre-inverted to match. Cached until the colour changes.
+function complementWhiteSpritesheet(bg) {
+  let seen = shouldInvertColors ? invertColor(bg) : bg;
+  let shown = lerpColor(complementColor(seen), color(255), COMPLEMENT_WHITENESS);
+  let lumShown = luminance(shown), lumBg = luminance(seen);
+  if (Math.abs(lumShown - lumBg) < COMPLEMENT_MIN_CONTRAST) {
+    // luminance() is linear, so these are how far toward white (or black)
+    // give exactly the contrast.
+    if (lumBg + COMPLEMENT_MIN_CONTRAST <= 255) {
+      let t = (lumBg + COMPLEMENT_MIN_CONTRAST - lumShown) / (255 - lumShown);
+      shown = lerpColor(shown, color(255), constrain(t, 0, 1));
+    } else {
+      let t = (lumShown - (lumBg - COMPLEMENT_MIN_CONTRAST)) / lumShown;
+      shown = lerpColor(shown, color(0), constrain(t, 0, 1));
+    }
   }
-  document.body.style.backgroundColor = `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
+  let c = shouldInvertColors ? invertColor(shown) : shown;
+
+  let key = c.toString();
+  if (key !== complementSheetKey) {
+    if (!complementSheet) {
+      complementSheet = createGraphics(spritesheet.width, spritesheet.height);
+      complementSheet.pixelDensity(1);
+      complementSheet.noSmooth();
+    }
+    complementSheet.clear();
+    complementSheet.tint(c);
+    complementSheet.image(whiteSpritesheet(), 0, 0);
+    complementSheetKey = key;
+  }
+  return complementSheet;
+}
+
+// Plain black or white glyphs, whichever reads better on bg as seen on
+// screen. Under CSS inversion the sheet drawn is the opposite one.
+function contrastSpritesheet(bg) {
+  let seen = shouldInvertColors ? invertColor(bg) : bg;
+  let white = isDark(seen) !== shouldInvertColors; // boot.js
+  return white ? whiteSpritesheet() : spritesheet;
 }
 
 function displayFigureName(name) {
@@ -489,13 +578,14 @@ function displayTile(char, col, row, sheet = spritesheet) {
 // Space/Enter or a click starts a random figure (handy for testing; the
 // installation itself is driven by MIDI chords). Cmd/Ctrl shortcuts are
 // handled in archive.js. + and - change the display scale. Q shows a
-// figure that quickens (quicken.js), which otherwise happens rarely.
+// figure that quickens (quicken.js), which otherwise happens rarely. The
+// left and right arrow keys turn the knob one position (input.js).
 function keyPressed(event) {
   userStartAudio();
   if (event && (event.metaKey || event.ctrlKey)) return;
   if (key === ' ' || keyCode === ENTER) {
     stopAttractMode();
-    initializeSketch();
+    initializeSketch(undefined, true);
     return false;
   }
   if (key === 'a' || key === 'A') {
@@ -503,7 +593,11 @@ function keyPressed(event) {
   }
   if (key === 'q' || key === 'Q') {
     stopAttractMode();
-    initializeSketch(randomQuickeningSeed()); // quicken.js: test the rare animation
+    initializeSketch(randomQuickeningSeed(), true); // quicken.js: test the rare animation
+    return false;
+  }
+  if (keyCode === LEFT_ARROW || keyCode === RIGHT_ARROW) {
+    nudgeKnob(keyCode === RIGHT_ARROW ? 1 : -1); // input.js: stands in for the potentiometer
     return false;
   }
   if (key === '+' || key === '=') {
@@ -519,13 +613,13 @@ function keyPressed(event) {
 function mousePressed() {
   userStartAudio();
   stopAttractMode();
-  initializeSketch();
+  initializeSketch(undefined, true);
 }
 
 function touchStarted() {
   userStartAudio();
   stopAttractMode();
-  initializeSketch();
+  initializeSketch(undefined, true);
   return false;
 }
 
