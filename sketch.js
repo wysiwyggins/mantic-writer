@@ -150,6 +150,7 @@ function draw() {
   if (loading) { // loader.js: "TESTING ..." lines before the figure
     let loaderSheet = loaderBackground();
     drawLoader();
+    drawLoaderAdjusting(); // loader.js: message while the knob is turning
     drawArchiveMessage();
     drawPadTiles(loaderSheet);
     drawPlanetaryHour();

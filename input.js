@@ -61,22 +61,22 @@ let padTilesUntil = 0;       // millis() until which the last gesture's tiles st
 // finger side) and Taurus (thumb side, ruled by Venus).
 // Change the note numbers here if the pads are wired in a different order.
 const PAD_TILES = {
-  // left hand, little finger to thumb, then palm
-  48: { glyph: 'MERCURY',       col: -7, row: 0 },
-  49: { glyph: 'APOLLO',        col: -6, row: 0 },
-  50: { glyph: 'SATURN',        col: -5, row: 0 },
-  51: { glyph: 'JUPITER',       col: -4, row: 0 },
-  52: { glyph: 'FEMALE_SYMBOL', col: -3, row: 0 },
-  53: { glyph: 'LAST_QUARTER_MOON', col: -6, row: 1 },
-  54: { glyph: 'TAURUS',        col: -4, row: 1 },
-  // right hand, thumb to little finger, then palm
-  55: { glyph: 'FEMALE_SYMBOL', col: 3, row: 0 },
-  56: { glyph: 'JUPITER',       col: 4, row: 0 },
-  57: { glyph: 'SATURN',        col: 5, row: 0 },
-  58: { glyph: 'APOLLO',        col: 6, row: 0 },
-  59: { glyph: 'MERCURY',       col: 7, row: 0 },
-  60: { glyph: 'TAURUS',        col: 4, row: 1 },
-  61: { glyph: 'LAST_QUARTER_MOON', col: 6, row: 1 },
+  // right hand, little finger to thumb, then palm
+  48: { glyph: 'MERCURY',       col: 7, row: 0 },
+  49: { glyph: 'APOLLO',        col: 6, row: 0 },
+  50: { glyph: 'SATURN',        col: 5, row: 0 },
+  51: { glyph: 'JUPITER',       col: 4, row: 0 },
+  52: { glyph: 'FEMALE_SYMBOL', col: 3, row: 0 },
+  53: { glyph: 'LAST_QUARTER_MOON', col: 6, row: 1 },
+  54: { glyph: 'TAURUS',        col: 4, row: 1 },
+  // left hand, thumb to little finger, then palm
+  55: { glyph: 'FEMALE_SYMBOL', col: -3, row: 0 },
+  56: { glyph: 'JUPITER',       col: -4, row: 0 },
+  57: { glyph: 'SATURN',        col: -5, row: 0 },
+  58: { glyph: 'APOLLO',        col: -6, row: 0 },
+  59: { glyph: 'MERCURY',       col: -7, row: 0 },
+  60: { glyph: 'TAURUS',        col: -4, row: 1 },
+  61: { glyph: 'LAST_QUARTER_MOON', col: -6, row: 1 },
 };
 const PAD_TILES_LINGER = 500; // ms the tiles stay up after the gesture ends, so a quick tap is still seen
 
@@ -126,6 +126,7 @@ function nudgeKnob(step) {
   let centre = v => Math.round((v + 0.5) * zoneWidth);
   knobMoved(centre(constrain(variation + step, 0, VARIATIONS - 1)));
   indicatorUntil = millis() + INDICATOR_DURATION; // show the slider even at either end
+  if (loading) loaderKnobTurned(lastKnobValue); // likewise the loader's feedback
 }
 
 // Map a CC value (0-127) to a knob position. Near the boundary with the
@@ -134,10 +135,10 @@ function knobMoved(value) {
   // The Nano re-sends the knob at the start of every touch; only show the
   // slider when the knob has actually been turned. Each move keeps it up for
   // another INDICATOR_DURATION, so it hides once the knob is at rest.
-  if (lastKnobValue !== null && Math.abs(value - lastKnobValue) > 1) {
-    indicatorUntil = millis() + INDICATOR_DURATION;
-  }
+  let turned = lastKnobValue !== null && Math.abs(value - lastKnobValue) > 1;
+  if (turned) indicatorUntil = millis() + INDICATOR_DURATION;
   lastKnobValue = value;
+  if (turned && loading) loaderKnobTurned(value); // loader.js: hue shift and message
 
   let zoneWidth = 128 / VARIATIONS;
   let next = Math.min(VARIATIONS - 1, Math.floor(value / zoneWidth));

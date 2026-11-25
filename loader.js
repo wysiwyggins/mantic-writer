@@ -27,6 +27,11 @@
 //
 // A new request while the loader runs replaces the seed it will show, so the
 // latest touch wins without restarting the text.
+//
+// Turning the knob while the loader runs rotates the background's hue (the
+// lettering follows, as it is tinted from the background) and shows
+// LOADER_ADJUST_TEXT near the top while the knob is moving. The shift lasts
+// until the loader ends; the figure keeps its own colours.
 
 const LOADER_SKILLS = 3;        // how many "TESTING" lines (from skills.json)
 const LOADER_CHAR_DELAY = 30;   // ms per letter as a line types out; 0 prints the words at once
@@ -39,6 +44,9 @@ const LOADER_FINAL_HOLD = 1200; // ms "YOUR TALISMAN IS..." stays up before the 
 const LOADER_FINAL_LINE = 'YOUR TALISMAN IS...';
 const LOADER_BLIP_VOLUME = 0.2; // per oscillator (boot screen uses BOOT_VOLUME, 0.25)
 const LOADER_BLIP_LENGTH = 0.06; // seconds each letter's blip fades over
+const LOADER_ADJUST_TEXT = 'ADJUSTING AURA MAGNIFICATION';
+const LOADER_ADJUST_LINGER = 800; // ms the message stays up after the knob last moved
+const LOADER_HUE_RANGE = 360;     // degrees of hue rotation across the knob's full travel
 const LOADER_ASTRO_LINES = [
   'CHECKING STAR CHARTS',
   'CONSULTING THE EPHEMERIS',
@@ -57,6 +65,9 @@ let loaderTimer = null;
 let loaderTyped = 0;     // letters shown so far, to blip once per new letter
 let loaderWave1, loaderWave2;
 let loaderBg = null;          // background colour this frame (set in loaderBackground)
+let loaderKnobStart = null;   // knob value when the loader started; hue shift is measured from it
+let loaderHueShift = 0;       // degrees the background's hue is rotated by the knob
+let loaderAdjustUntil = 0;    // millis() until which LOADER_ADJUST_TEXT is shown
 
 // Not Math.random: generateFigureNameFromTiles() reseeds it from the figure,
 // so it would pick the same skills after the same figure.
@@ -81,6 +92,9 @@ function startLoader(seed) {
   loaderLines = buildLoaderLines();
   loaderStart = millis();
   loaderTyped = 0;
+  loaderKnobStart = lastKnobValue; // input.js
+  loaderHueShift = 0;
+  loaderAdjustUntil = 0;
   startLoaderSound();
 
   // Each line starts once the previous one has typed out and paused. The
@@ -187,8 +201,52 @@ function loaderShown(li, elapsed) {
 // glyphs (input.js), drawn as on a figure.
 function loaderBackground() {
   loaderBg = baseColor || bootColors[0] || color(200);
+  if (loaderHueShift) {
+    loaderBg = rotateHue(loaderBg, loaderHueShift);
+    background(loaderBg);
+    return contrastSpritesheet(loaderBg); // the figure's tint was made for the old ground
+  }
   background(loaderBg);
   return baseColor ? tintedSpritesheet() : contrastSpritesheet(loaderBg);
+}
+
+// Called from knobMoved() (input.js) when the knob is actually turned while
+// loading. Knob travel from where it sat at the start maps to hue rotation.
+function loaderKnobTurned(value) {
+  if (loaderKnobStart === null) loaderKnobStart = value;
+  loaderHueShift = (value - loaderKnobStart) / 127 * LOADER_HUE_RANGE;
+  loaderAdjustUntil = millis() + LOADER_ADJUST_LINGER;
+}
+
+// Rotate a colour's hue by deg degrees, keeping its brightness roughly the
+// same (the standard RGB hue-rotation matrix, as in CSS hue-rotate()).
+function rotateHue(c, deg) {
+  let a = deg * Math.PI / 180, cs = Math.cos(a), sn = Math.sin(a);
+  let r = red(c), g = green(c), b = blue(c);
+  let ch = (k0, k1, k2) => constrain(Math.round(k0 * r + k1 * g + k2 * b), 0, 255);
+  return color(
+    ch(0.213 + cs * 0.787 - sn * 0.213, 0.715 - cs * 0.715 - sn * 0.715, 0.072 - cs * 0.072 + sn * 0.928),
+    ch(0.213 - cs * 0.213 + sn * 0.143, 0.715 + cs * 0.285 + sn * 0.140, 0.072 - cs * 0.072 - sn * 0.283),
+    ch(0.213 - cs * 0.213 - sn * 0.787, 0.715 - cs * 0.715 + sn * 0.715, 0.072 + cs * 0.928 + sn * 0.072));
+}
+
+// Called from draw() while loading: LOADER_ADJUST_TEXT two rows from the top
+// (below the date line) while the knob is turning, wrapped on narrow screens.
+function drawLoaderAdjusting() {
+  if (millis() >= loaderAdjustUntil) return;
+  let w = globalVars.TILE_WIDTH, h = globalVars.TILE_HEIGHT;
+  let maxCols = Math.max(1, CANVAS_COLS - 2);
+  let rows = [];
+  for (let word of LOADER_ADJUST_TEXT.split(' ')) {
+    let last = rows.length - 1;
+    if (last >= 0 && rows[last].length + 1 + word.length <= maxCols) rows[last] += ' ' + word;
+    else rows.push(word);
+  }
+  let sheet = contrastSpritesheet(loaderBg); // sketch.js
+  rows.forEach((row, i) => {
+    let x = Math.floor((CANVAS_COLS - row.length) / 2) * w;
+    drawBootLine(row, x, (2 + i) * h, sheet); // boot.js
+  });
 }
 
 // Called from draw(). Layout comes from the full text, so lines don't shift
