@@ -26,6 +26,7 @@ const ATTRACT_TOGGLE_CC = 64;  // Nano's attract-mode button (sent as CC 64)
 const DAILY_SEEDS = true;      // false: a chord shows the same figure every day
 const RANDOM_CC = 65;          // Nano's random-figure button (must match RANDOM_CC in the firmware)
 const VARIATION_CC = 1;         // Nano's potentiometer (must match POT_CC in the firmware)
+const SLIDER_REVERSED = true;  // draw the knob slider mirrored, to match the turning direction of the pot as wired
 const VARIATIONS = 8;          // how many knob positions; changing this changes which figure each position gives
 const VARIATION_SETTLE = 400;  // ms the knob must rest before the figure on screen is redrawn
 const INDICATOR_DURATION = 3000; // ms the knob slider stays up after the knob last moved
@@ -61,20 +62,20 @@ let padTilesUntil = 0;       // millis() until which the last gesture's tiles st
 // finger side) and Taurus (thumb side, ruled by Venus).
 // Change the note numbers here if the pads are wired in a different order.
 const PAD_TILES = {
-  // right hand, little finger to thumb, then palm
-  48: { glyph: 'MERCURY',       col: 7, row: 0 },
-  49: { glyph: 'APOLLO',        col: 6, row: 0 },
+  // right hand, thumb to little finger, then palm
+  48: { glyph: 'FEMALE_SYMBOL', col: 3, row: 0 },
+  49: { glyph: 'JUPITER',       col: 4, row: 0 },
   50: { glyph: 'SATURN',        col: 5, row: 0 },
-  51: { glyph: 'JUPITER',       col: 4, row: 0 },
-  52: { glyph: 'FEMALE_SYMBOL', col: 3, row: 0 },
+  51: { glyph: 'APOLLO',        col: 6, row: 0 },
+  52: { glyph: 'MERCURY',       col: 7, row: 0 },
   53: { glyph: 'LAST_QUARTER_MOON', col: 6, row: 1 },
   54: { glyph: 'TAURUS',        col: 4, row: 1 },
-  // left hand, thumb to little finger, then palm
-  55: { glyph: 'FEMALE_SYMBOL', col: -3, row: 0 },
-  56: { glyph: 'JUPITER',       col: -4, row: 0 },
+  // left hand, little finger to thumb, then palm
+  55: { glyph: 'MERCURY',       col: -7, row: 0 },
+  56: { glyph: 'APOLLO',        col: -6, row: 0 },
   57: { glyph: 'SATURN',        col: -5, row: 0 },
-  58: { glyph: 'APOLLO',        col: -6, row: 0 },
-  59: { glyph: 'MERCURY',       col: -7, row: 0 },
+  58: { glyph: 'JUPITER',       col: -4, row: 0 },
+  59: { glyph: 'FEMALE_SYMBOL', col: -3, row: 0 },
   60: { glyph: 'TAURUS',        col: -4, row: 1 },
   61: { glyph: 'LAST_QUARTER_MOON', col: -6, row: 1 },
 };
@@ -227,6 +228,7 @@ function drawVariationIndicator() {
   let left = Math.floor((CANVAS_COLS - SLIDER_LENGTH) / 2) * w;
   let y = height - 2 * h; // second row from the bottom
   let knobAt = Math.round(lastKnobValue / 127 * (SLIDER_LENGTH - 1));
+  if (SLIDER_REVERSED) knobAt = SLIDER_LENGTH - 1 - knobAt;
   for (let i = 0; i < SLIDER_LENGTH; i++) {
     let key = i === knobAt ? 'BULLET'
       : i === 0 ? 'BOX_RIGHT_VERTICAL'               // ├
