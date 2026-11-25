@@ -31,6 +31,15 @@ const VARIATION_SETTLE = 400;  // ms the knob must rest before the figure on scr
 const INDICATOR_DURATION = 3000; // ms the knob slider stays up after the knob last moved
 const SLIDER_LENGTH = 16;      // tiles across the knob slider, ends included
 const STUCK_NOTE_TIMEOUT = 5000; // ms without MIDI activity before a stuck gesture is closed
+// Pairs of opposites for the two ends of the knob slider (left, right). One
+// pair is picked at random each time the slider appears.
+const SLIDER_END_PAIRS = [
+  ['FEMALE_SYMBOL', 'BOW_AND_ARROW'],   // Venus and Mars
+  ['LAST_QUARTER_MOON', 'APOLLO'],      // Moon and Sun
+  ['SALT', 'SULFUR'],                   // the alchemical fixed and volatile
+  ['HYPHEN_MINUS', 'PLUS_SIGN'],        // minus and plus
+  ['WATER', 'TORCH_ON_WALL'],           // water and fire
+];
 
 let heldNotes = new Set();   // notes currently down
 let chordNotes = new Set();  // every note touched during the current gesture
@@ -39,6 +48,8 @@ let variation = 0;           // current knob position, 0..VARIATIONS-1
 let variationTimer = null;
 let lastKnobValue = null;    // last CC value received, to tell real turns from re-sends
 let indicatorUntil = 0;      // millis() until which the knob slider is shown
+let indicatorShowing = false; // whether the slider was drawn last frame
+let sliderEnds = SLIDER_END_PAIRS[0]; // the pair of opposites at the slider's ends
 let padTilesShown = new Set(); // notes whose tiles are on screen (see drawPadTiles)
 let padTilesUntil = 0;       // millis() until which the last gesture's tiles stay up
 
@@ -197,10 +208,20 @@ function chordToSeed(notes) {
 }
 
 // Called from draw(): a slider one row above the bottom, a box-drawing line with
-// a bullet for the knob and Venus and Mars at the ends, so visitors can see
-// where the knob is turned to.
+// a bullet for the knob and a pair of opposites at the ends (SLIDER_END_PAIRS),
+// so visitors can see where the knob is turned to.
 function drawVariationIndicator() {
-  if (millis() >= indicatorUntil || lastKnobValue === null) return;
+  if (millis() >= indicatorUntil || lastKnobValue === null) {
+    indicatorShowing = false;
+    return;
+  }
+  // New pair each time it appears. crypto, not random(): Math.random is
+  // reseeded globally when a figure is named (sketch.js), so leave it alone.
+  if (!indicatorShowing) {
+    let r = crypto.getRandomValues(new Uint32Array(1))[0];
+    sliderEnds = SLIDER_END_PAIRS[r % SLIDER_END_PAIRS.length];
+  }
+  indicatorShowing = true;
   let w = globalVars.TILE_WIDTH, h = globalVars.TILE_HEIGHT;
   let left = Math.floor((CANVAS_COLS - SLIDER_LENGTH) / 2) * w;
   let y = height - 2 * h; // second row from the bottom
@@ -213,8 +234,8 @@ function drawVariationIndicator() {
     let coords = spritesheetData.tiles[key];
     image(spritesheet, left + i * w, y, w, h, coords[0] * w, coords[1] * h, w, h);
   }
-  // Venus and Mars (the bow and arrow) mark the two ends, right against the slider.
-  let ends = [['FEMALE_SYMBOL', left - w], ['BOW_AND_ARROW', left + SLIDER_LENGTH * w]];
+  // The pair of opposites marks the two ends, right against the slider.
+  let ends = [[sliderEnds[0], left - w], [sliderEnds[1], left + SLIDER_LENGTH * w]];
   for (let [key, x] of ends) {
     let coords = spritesheetData.tiles[key];
     image(spritesheet, x, y, w, h, coords[0] * w, coords[1] * h, w, h);
