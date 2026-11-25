@@ -597,15 +597,15 @@ function keyPressed(event) {
     return false;
   }
   if (keyCode === LEFT_ARROW || keyCode === RIGHT_ARROW) {
-    nudgeKnob(keyCode === RIGHT_ARROW ? 1 : -1); // input.js: stands in for the potentiometer
+    nudgeKnob(keyCode === RIGHT_ARROW ? -1 : 1); // input.js: stands in for the potentiometer
     return false;
   }
   if (key === '+' || key === '=') {
-    changeDisplayScale(1);
+    changeDisplayScale(-1);
     return false;
   }
   if (key === '-' || key === '_') {
-    changeDisplayScale(-1);
+    changeDisplayScale(1);
     return false;
   }
 }
