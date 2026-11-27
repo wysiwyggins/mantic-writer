@@ -1,33 +1,15 @@
 // planetaryHours.js
-// Shows today's date and the symbol of the current planetary hour's planet
-// at the top centre of the screen, e.g. "November 20 ♄", in white tinted
-// with the background's complement (complementWhiteSpritesheet() in
-// sketch.js), for PLANETARY_HOUR_SHOWN after each planetary hour begins
-// (and after startup).
-//
-// The day from sunrise to sunset is split into 12 equal hours, and the night
-// from sunset to the next sunrise into another 12, so hours are longer or
-// shorter than 60 minutes depending on the season. The first hour after
-// sunrise belongs to the planet ruling that weekday (Sunday the Sun, Monday
-// the Moon, Tuesday Mars, Wednesday Mercury, Thursday Jupiter, Friday Venus,
-// Saturday Saturn), and each following hour to the next planet in the
-// Chaldean order. A planetary day runs from sunrise to sunrise, so the hours
-// before dawn still belong to the previous day.
-//
-// Sunrise and sunset are calculated for the location below (the Pi has no
-// network location), using the Pi's clock and time zone.
+// Date and current planetary hour along the top of the screen.
 
-const LATITUDE = 45.50;    // degrees north (Montreal)
-const LONGITUDE = -73.57;  // degrees east; west is negative
+const LATITUDE = 45.50;
+const LONGITUDE = -73.57;
 const CHALDEAN = ['SATURN', 'JUPITER', 'MARS', 'SUN', 'VENUS', 'MERCURY', 'MOON'];
-const WEEKDAY_RULERS = ['SUN', 'MOON', 'MARS', 'MERCURY', 'JUPITER', 'VENUS', 'SATURN']; // Sunday first
-const PLANETARY_HOUR_REFRESH = 5000;  // ms between recalculations
-const PLANETARY_HOUR_SHOWN = 2 * 60000; // ms the line stays up after the hour changes
+const WEEKDAY_RULERS = ['SUN', 'MOON', 'MARS', 'MERCURY', 'JUPITER', 'VENUS', 'SATURN'];
+const PLANETARY_HOUR_REFRESH = 5000;
+const PLANETARY_HOUR_SHOWN = 2 * 60000;
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
   'August', 'September', 'October', 'November', 'December'];
 
-// Spritesheet tile for each planet. The sheet has no Mars or crescent-Moon
-// symbol yet, so Mars is the bow and arrow and the Moon a shaded phase.
 const PLANET_TILES = {
   SATURN: 'SATURN',
   JUPITER: 'JUPITER',
@@ -39,9 +21,9 @@ const PLANET_TILES = {
 };
 
 let planetaryHourRuler = null;
-let planetaryHourDate = ''; // calendar date, e.g. "November 20"
+let planetaryHourDate = '';
 let planetaryHourCheckedAt = -Infinity;
-let planetaryHourShownUntil = 0; // millis() until which the line is drawn
+let planetaryHourShownUntil = 0;
 
 // Called from draw().
 function drawPlanetaryHour() {
@@ -49,7 +31,6 @@ function drawPlanetaryHour() {
     let now = new Date();
     let hour = planetaryHour(now);
     let ruler = hour ? hour.ruler : null;
-    // Neighbouring hours always have different planets, so a new ruler means a new hour.
     if (ruler !== planetaryHourRuler || planetaryHourCheckedAt === -Infinity) {
       planetaryHourShownUntil = millis() + PLANETARY_HOUR_SHOWN;
     }
@@ -58,24 +39,18 @@ function drawPlanetaryHour() {
     planetaryHourCheckedAt = millis();
   }
   if (millis() >= planetaryHourShownUntil) return;
-  // White tinted with the background's complement (sketch.js). While loading,
-  // the loader's background; while quickening, the figure's original one, as
-  // its ground drifts every step and the sheet would be re-tinted each time.
   let bg = loading ? loaderBg : isQuickening() ? quickening.baseColor : baseColor;
   let sheet = complementWhiteSpritesheet(bg);
   let w = globalVars.TILE_WIDTH, h = globalVars.TILE_HEIGHT;
-  // The date, a space, then the planet's symbol, centred as one line.
   let length = planetaryHourDate.length + (planetaryHourRuler ? 2 : 0);
-  let x = Math.floor((width - length * w) / 2); // centred like the figure name
-  drawBootLine(planetaryHourDate, x, 0, sheet); // boot.js: keeps lowercase letters
+  let x = Math.floor((width - length * w) / 2);
+  drawBootLine(planetaryHourDate, x, 0, sheet);
   if (!planetaryHourRuler) return;
   let coords = spritesheetData.tiles[PLANET_TILES[planetaryHourRuler]];
   image(sheet, x + (planetaryHourDate.length + 1) * w, 0, w, h, coords[0] * w, coords[1] * h, w, h);
 }
 
-// { ruler, index (0-23, 0 = first hour after sunrise), isDay, dayDate (local
-// noon of the planetary day, which starts at sunrise) } for a moment, or null
-// where the sun doesn't rise or set that day.
+// { ruler, index, isDay, dayDate } for a moment, or null.
 function planetaryHour(now) {
   let today = localDate(now, 0);
   let sunToday = sunTimes(today);
@@ -83,7 +58,6 @@ function planetaryHour(now) {
 
   let dayDate, start, end, offset;
   if (now < sunToday.rise) {
-    // Before dawn: the night hours of yesterday's planetary day.
     let sunYesterday = sunTimes(localDate(now, -1));
     if (!sunYesterday) return null;
     dayDate = localDate(now, -1);
@@ -108,9 +82,7 @@ function localDate(moment, days) {
   return new Date(moment.getFullYear(), moment.getMonth(), moment.getDate() + days, 12);
 }
 
-// Sunrise and sunset (Dates) for the local day containing `noon`, from the
-// standard sunrise equation; accurate to a minute or two. null during polar
-// day or night.
+// Sunrise and sunset for the local day containing noon, or null.
 function sunTimes(noon) {
   const rad = Math.PI / 180;
   let julian = noon.getTime() / 86400000 + 2440587.5;
@@ -124,7 +96,7 @@ function sunTimes(noon) {
   let cosDecl = Math.cos(Math.asin(sinDecl));
   let cosHourAngle = (Math.sin(-0.833 * rad) - Math.sin(LATITUDE * rad) * sinDecl) / (Math.cos(LATITUDE * rad) * cosDecl);
   if (cosHourAngle < -1 || cosHourAngle > 1) return null;
-  let halfDay = Math.acos(cosHourAngle) / rad / 360; // in days
+  let halfDay = Math.acos(cosHourAngle) / rad / 360;
   let toDate = j => new Date((j - 2440587.5) * 86400000);
   return { rise: toDate(transit - halfDay), set: toDate(transit + halfDay) };
 }

@@ -1,17 +1,12 @@
-// Boot screen, after the "boot" sketch in Didaktik Gama: a flat field of
-// colour that, every few seconds, flashes alternating stripes in a new
-// colour and its complements while two low oscillators jump in pitch.
-// This was a reference to Atari ST disc loading screens (sort of)
-// The title and credit sit along the bottom in spritesheet glyphs.
-// Ends after BOOT_DURATION, or as soon as a figure starts (chord, key,
-// click, attract mode): initializeSketch() calls endBoot().
+// boot.js
+// Boot screen: flashing colour stripes, title and credit.
 
 const BOOT_TITLE = 'Mantic Writer';
 const BOOT_CREDIT = 'Wiley Wiggins 2026';
-const BOOT_DURATION = 12000;    // ms before the first figure appears
-const BOOT_CYCLE = 4000;        // ms between colour changes (120 frames at 30fps in the original)
-const BOOT_FLASH = 170;         // ms of stripes at the start of each cycle (5 frames at 30fps)
-const BOOT_VOLUME = 0.25;       // per oscillator
+const BOOT_DURATION = 12000;
+const BOOT_CYCLE = 4000;
+const BOOT_FLASH = 170;
+const BOOT_VOLUME = 0.25;
 
 let booting = false;
 let bootStart = 0;
@@ -46,7 +41,7 @@ function endBoot() {
 function drawBoot() {
   let elapsed = millis() - bootStart;
   if (elapsed > BOOT_DURATION) {
-    initializeSketch(); // ends the boot screen
+    initializeSketch();
     return;
   }
 
@@ -79,7 +74,6 @@ function generateBootColors() {
     bootColors.push(color((hue(base) + i * 90) % 360, saturation(base), brightness(base)));
   }
   pop();
-  // Letterbox around the canvas follows the field colour.
   document.body.style.backgroundColor = bootColors[0].toString('#rrggbb');
 }
 
@@ -93,8 +87,7 @@ function drawBootStripes() {
   }
 }
 
-// Title at bottom left, credit at bottom right, as in the original boot.png.
-// On a narrow screen where they won't share a row, stack them, centred.
+// Title bottom left, credit bottom right; stacked on narrow screens.
 function drawBootText() {
   let sheet = isDark(bootColors[0]) ? whiteSpritesheet() : spritesheet;
   let tw = globalVars.TILE_WIDTH;
@@ -116,17 +109,15 @@ function drawBootText() {
 
 // Dark grounds get white text, as inverted figures do in the main sketch.
 function isDark(c) {
-  return luminance(c) < 128; // sketch.js
+  return luminance(c) < 128;
 }
 
-// The glyphs are near-black, and tint() can only darken them, so white text
-// needs an inverted copy of the spritesheet. Made once, on first use.
+// An inverted (white) copy of the spritesheet, made once.
 function whiteSpritesheet() {
   if (!bootWhiteSheet) {
     bootWhiteSheet = createGraphics(spritesheet.width, spritesheet.height);
     bootWhiteSheet.pixelDensity(1);
     bootWhiteSheet.image(spritesheet, 0, 0);
-    // Invert colour by hand, keeping transparency as it is.
     bootWhiteSheet.loadPixels();
     let px = bootWhiteSheet.pixels;
     for (let i = 0; i < px.length; i += 4) {

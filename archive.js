@@ -1,19 +1,10 @@
 // archive.js
-// Saved seeds ("cards") and attract mode.
-//
-//   Cmd/Ctrl-S          save the figure on screen
-//   Cmd/Ctrl-Backspace  remove the figure on screen from the saved list
-//   Cmd/Ctrl-E          download the saved list as JSON (backup)
-//   drop a .json file   import a saved list (merged with the current one)
-//   A, or the Nano's button (MIDI CC 64)   toggle attract mode
-//
-// Attract mode cycles through saved figures on a timer. It also starts by
-// itself after a stretch with no visitors, and stops on any touch.
+// Saved seeds and attract mode.
 
 const STORAGE_KEY = 'manticSeeds';
-const ATTRACT_ENABLED = false;            // false disables attract mode entirely (manual and idle)
-const ATTRACT_INTERVAL = 12000;          // ms each saved figure stays up
-const IDLE_BEFORE_ATTRACT = 3 * 60000;   // ms without input before attract mode starts
+const ATTRACT_ENABLED = false;
+const ATTRACT_INTERVAL = 12000;
+const IDLE_BEFORE_ATTRACT = 3 * 60000;
 
 let attractTimer = null;
 let attractIndex = 0;
@@ -27,8 +18,6 @@ function setupArchive() {
   window.addEventListener('drop', handleArchiveDrop);
   noteUserActivity();
 }
-
-// --- storage ---------------------------------------------------------------
 
 function loadSavedSeeds() {
   try {
@@ -97,13 +86,11 @@ function handleArchiveDrop(event) {
   });
 }
 
-// --- keys ------------------------------------------------------------------
-
 function handleArchiveKeys(event) {
   if (!(event.metaKey || event.ctrlKey)) return;
   let k = event.key.toLowerCase();
   if (k === 's') {
-    event.preventDefault(); // don't open the browser's "Save page" dialog
+    event.preventDefault();
     saveCurrentSeed();
   } else if (k === 'e') {
     event.preventDefault();
@@ -113,8 +100,6 @@ function handleArchiveKeys(event) {
     removeCurrentSeed();
   }
 }
-
-// --- attract mode ----------------------------------------------------------
 
 function isAttractMode() {
   return attractTimer !== null;
@@ -148,8 +133,8 @@ function toggleAttractMode() {
 }
 
 function showNextSavedSeed() {
-  if (isQuickening()) return; // let a quickening figure finish its minute
-  let list = loadSavedSeeds(); // re-read so saves made meanwhile are included
+  if (isQuickening()) return;
+  let list = loadSavedSeeds();
   if (list.length === 0) {
     stopAttractMode();
     return;
@@ -161,15 +146,13 @@ function showNextSavedSeed() {
 
 // Any visitor input restarts the countdown to attract mode.
 function noteUserActivity() {
-  resetIdleQuicken(); // quicken.js: idle quickening counts from the last input
+  resetIdleQuicken();
   clearTimeout(idleTimer);
   if (!ATTRACT_ENABLED) return;
   idleTimer = setTimeout(() => {
     if (!isAttractMode() && loadSavedSeeds().length > 0) startAttractMode();
   }, IDLE_BEFORE_ATTRACT);
 }
-
-// --- on-screen notices -----------------------------------------------------
 
 function showArchiveMessage(text, duration = 1500) {
   archiveMessage = text;

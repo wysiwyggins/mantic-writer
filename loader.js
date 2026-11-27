@@ -1,89 +1,56 @@
 // loader.js
-// A short "measuring" screen between a visitor's request (pad chord, random
-// button, space/click) and the figure, to build anticipation. The tiles are
-// cleared and a centred column of lines is typed out in tile letters:
-//
-//   TESTING MERCY...
-//   TESTING CIRCUITOUSNESS...
-//   TESTING LITERACY...
-//   CHECKING STAR CHARTS...
-//   YOUR TALISMAN IS...
-//
-// then the figure is drawn as usual. The screen keeps the previous figure's
-// colours (the boot colour before the first figure). Knob redraws, attract
-// mode, resizes and the end of the boot screen skip it.
-//
-// The words type at a steady pace, but the dots after each "TESTING" and
-// astrology line come at uneven, random intervals, and there are a random
-// number of them, as if the machine were working something out.
-//
-// The lines are in white tinted with the complement of the background
-// colour (complementWhiteSpritesheet() in sketch.js). "YOUR TALISMAN IS..."
-// sits one row below the rest, in plain black or white, whichever stands
-// out more on the background.
-//
-// Each letter makes a short blip on two low oscillators at random pitches,
-// the same voices as the boot screen (boot.js).
-//
-// A new request while the loader runs replaces the seed it will show, so the
-// latest touch wins without restarting the text.
-//
-// Turning the knob while the loader runs rotates the background's hue (the
-// lettering follows, as it is tinted from the background) and shows
-// LOADER_ADJUST_TEXT near the top while the knob is moving. The shift lasts
-// until the loader ends; the figure keeps its own colours.
+// The "measuring" screen typed out before a requested figure.
 
-const LOADER_SKILLS = 3;        // how many "TESTING" lines (from skills.json)
-const LOADER_CHAR_DELAY = 30;   // ms per letter as a line types out; 0 prints the words at once
-const LOADER_DOTS_MIN = 2;      // fewest dots after a "TESTING" or astrology line
-const LOADER_DOTS_MAX = 7;      // most dots
-const LOADER_DOT_DELAY_MIN = 80;  // ms before each dot, chosen at random between these
+const LOADER_SKILLS = 3;
+const LOADER_CHAR_DELAY = 30;
+const LOADER_DOTS_MIN = 2;
+const LOADER_DOTS_MAX = 7;
+const LOADER_DOT_DELAY_MIN = 80;
 const LOADER_DOT_DELAY_MAX = 500;
-const LOADER_LINE_PAUSE = 450;  // ms between one line finishing and the next starting
-const LOADER_FINAL_HOLD = 1200; // ms "YOUR TALISMAN IS..." stays up before the figure starts
+const LOADER_LINE_PAUSE = 450;
+const LOADER_FINAL_HOLD = 1200;
 const LOADER_FINAL_LINE = 'YOUR TALISMAN IS...';
-const LOADER_BLIP_VOLUME = 0.2; // per oscillator (boot screen uses BOOT_VOLUME, 0.25)
-const LOADER_BLIP_LENGTH = 0.06; // seconds each letter's blip fades over
+const LOADER_BLIP_VOLUME = 0.2;
+const LOADER_BLIP_LENGTH = 0.06;
 const LOADER_ADJUST_TEXT = 'ADJUSTING AURA MAGNIFICATION';
-const LOADER_ADJUST_LINGER = 800; // ms the message stays up after the knob last moved
-const LOADER_HUE_RANGE = 360;     // degrees of hue rotation across the knob's full travel
+const LOADER_ADJUST_LINGER = 800;
+const LOADER_HUE_RANGE = 360;
 const LOADER_ASTRO_LINES = [
   'CHECKING STAR CHARTS',
   'CONSULTING THE EPHEMERIS',
   'CASTING YOUR NATIVITY',
   'ALIGNING THE PLANETS',
   'READING THE HOUSES',
-  'HOUR', // replaced by the current planetary hour, e.g. "CONSULTING THE HOUR OF SATURN"
+  'HOUR',
 ];
 
 let loading = false;
-let loaderSeed = null;   // the seed to show when the loader ends
-let loaderLines = [];    // full text of each line
-let loaderTimes = [];    // per line, ms after loaderStart at which each character appears
+let loaderSeed = null;
+let loaderLines = [];
+let loaderTimes = [];
 let loaderStart = 0;
 let loaderTimer = null;
-let loaderTyped = 0;     // letters shown so far, to blip once per new letter
+let loaderTyped = 0;
 let loaderWave1, loaderWave2;
-let loaderBg = null;          // background colour this frame (set in loaderBackground)
-let loaderKnobStart = null;   // knob value when the loader started; hue shift is measured from it
-let loaderHueShift = 0;       // degrees the background's hue is rotated by the knob
-let loaderAdjustUntil = 0;    // millis() until which LOADER_ADJUST_TEXT is shown
+let loaderBg = null;
+let loaderKnobStart = null;
+let loaderHueShift = 0;
+let loaderAdjustUntil = 0;
 
-// Not Math.random: generateFigureNameFromTiles() reseeds it from the figure,
-// so it would pick the same skills after the same figure.
+// Not Math.random, which figure naming reseeds.
 function loaderRandomInt(n) {
   return crypto.getRandomValues(new Uint32Array(1))[0] % n;
 }
 
 function startLoader(seed) {
-  endBoot();        // boot.js
-  stopQuickening(); // quicken.js
+  endBoot();
+  stopQuickening();
   clearTimeout(placementTimeout);
   placementTimeout = null;
   clearTimeout(figureHoldTimer);
   figureHoldTimer = null;
   clearTimeout(loaderTimer);
-  figureHoldUntil = Infinity; // later requests go to loaderSeed (initializeSketch)
+  figureHoldUntil = Infinity;
   tiles = [];
   figureName = '';
 
@@ -92,14 +59,11 @@ function startLoader(seed) {
   loaderLines = buildLoaderLines();
   loaderStart = millis();
   loaderTyped = 0;
-  loaderKnobStart = lastKnobValue; // input.js
+  loaderKnobStart = lastKnobValue;
   loaderHueShift = 0;
   loaderAdjustUntil = 0;
   startLoaderSound();
 
-  // Each line starts once the previous one has typed out and paused. The
-  // words type at LOADER_CHAR_DELAY; the "thinking" dots (lines with
-  // thinking: true) each wait a random time.
   loaderTimes = [];
   let t = 0;
   for (let line of loaderLines) {
@@ -157,8 +121,6 @@ function stopLoader() {
   loading = false;
 }
 
-// --- sound ------------------------------------------------------------------
-
 function startLoaderSound() {
   if (!loaderWave1) {
     loaderWave1 = new p5.Oscillator('triangle');
@@ -177,8 +139,7 @@ function stopLoaderSound() {
   }
 }
 
-// One letter's blip: jump both oscillators to new pitches (the boot screen's
-// ranges), then a quick attack and fade.
+// One letter's blip sound.
 function loaderBlip() {
   loaderWave1.freq(random(50, 100));
   loaderWave2.freq(random(10, 100));
@@ -196,30 +157,26 @@ function loaderShown(li, elapsed) {
   return n;
 }
 
-// Called from draw(). Paints the background, the previous figure's or the
-// boot screen's before the first figure, and returns the sheet for the pad
-// glyphs (input.js), drawn as on a figure.
+// Paint the loader background; returns the sheet for pad glyphs.
 function loaderBackground() {
   loaderBg = baseColor || bootColors[0] || color(200);
   if (loaderHueShift) {
     loaderBg = rotateHue(loaderBg, loaderHueShift);
     background(loaderBg);
-    return contrastSpritesheet(loaderBg); // the figure's tint was made for the old ground
+    return contrastSpritesheet(loaderBg);
   }
   background(loaderBg);
   return baseColor ? tintedSpritesheet() : contrastSpritesheet(loaderBg);
 }
 
-// Called from knobMoved() (input.js) when the knob is actually turned while
-// loading. Knob travel from where it sat at the start maps to hue rotation.
+// Knob travel while loading shifts the hue.
 function loaderKnobTurned(value) {
   if (loaderKnobStart === null) loaderKnobStart = value;
   loaderHueShift = (value - loaderKnobStart) / 127 * LOADER_HUE_RANGE;
   loaderAdjustUntil = millis() + LOADER_ADJUST_LINGER;
 }
 
-// Rotate a colour's hue by deg degrees, keeping its brightness roughly the
-// same (the standard RGB hue-rotation matrix, as in CSS hue-rotate()).
+// Rotate a colour's hue by deg degrees.
 function rotateHue(c, deg) {
   let a = deg * Math.PI / 180, cs = Math.cos(a), sn = Math.sin(a);
   let r = red(c), g = green(c), b = blue(c);
@@ -230,8 +187,7 @@ function rotateHue(c, deg) {
     ch(0.213 - cs * 0.213 - sn * 0.787, 0.715 - cs * 0.715 + sn * 0.715, 0.072 + cs * 0.928 + sn * 0.072));
 }
 
-// Called from draw() while loading: LOADER_ADJUST_TEXT two rows from the top
-// (below the date line) while the knob is turning, wrapped on narrow screens.
+// The adjusting message while the knob turns.
 function drawLoaderAdjusting() {
   if (millis() >= loaderAdjustUntil) return;
   let w = globalVars.TILE_WIDTH, h = globalVars.TILE_HEIGHT;
@@ -242,21 +198,19 @@ function drawLoaderAdjusting() {
     if (last >= 0 && rows[last].length + 1 + word.length <= maxCols) rows[last] += ' ' + word;
     else rows.push(word);
   }
-  let sheet = contrastSpritesheet(loaderBg); // sketch.js
+  let sheet = contrastSpritesheet(loaderBg);
   rows.forEach((row, i) => {
     let x = Math.floor((CANVAS_COLS - row.length) / 2) * w;
-    drawBootLine(row, x, (2 + i) * h, sheet); // boot.js
+    drawBootLine(row, x, (2 + i) * h, sheet);
   });
 }
 
-// Called from draw(). Layout comes from the full text, so lines don't shift
-// as they type; it is worked out every frame, so a resize just works.
+// Draw the typed-out lines.
 function drawLoader() {
   let elapsed = millis() - loaderStart;
   let w = globalVars.TILE_WIDTH, h = globalVars.TILE_HEIGHT;
   let maxCols = Math.max(1, CANVAS_COLS - 2);
 
-  // Wrap each line into rows; remember each row's offset in its line.
   let rows = [];
   let typed = 0;
   let last = loaderLines.length - 1;
@@ -264,7 +218,7 @@ function drawLoader() {
     let shown = loaderShown(li, elapsed);
     typed += shown;
     let final = li === last;
-    if (final) rows.push(null); // a blank row above "YOUR TALISMAN IS..."
+    if (final) rows.push(null);
     let offset = 0;
     let current = '';
     let currentOffset = 0;
@@ -281,14 +235,13 @@ function drawLoader() {
     rows.push({ text: current, offset: currentOffset, shown, final });
   });
 
-  // Blip when a new letter appears (at most once a frame).
   if (typed > loaderTyped) {
     loaderTyped = typed;
     loaderBlip();
   }
 
-  let sheet = complementWhiteSpritesheet(loaderBg);  // sketch.js
-  let finalSheet = contrastSpritesheet(loaderBg);     // sketch.js
+  let sheet = complementWhiteSpritesheet(loaderBg);
+  let finalSheet = contrastSpritesheet(loaderBg);
   let y = Math.floor((CANVAS_ROWS - rows.length) / 2) * h;
   for (let row of rows) {
     if (!row) { y += h; continue; }
