@@ -73,8 +73,9 @@ function drawPlanetaryHour() {
   image(sheet, x + (planetaryHourDate.length + 1) * w, 0, w, h, coords[0] * w, coords[1] * h, w, h);
 }
 
-// { ruler, index (0-23, 0 = first hour after sunrise), isDay } for a moment,
-// or null where the sun doesn't rise or set that day.
+// { ruler, index (0-23, 0 = first hour after sunrise), isDay, dayDate (local
+// noon of the planetary day, which starts at sunrise) } for a moment, or null
+// where the sun doesn't rise or set that day.
 function planetaryHour(now) {
   let today = localDate(now, 0);
   let sunToday = sunTimes(today);
@@ -99,7 +100,7 @@ function planetaryHour(now) {
 
   let index = offset + Math.min(11, Math.floor((now - start) / (end - start) * 12));
   let first = CHALDEAN.indexOf(WEEKDAY_RULERS[dayDate.getDay()]);
-  return { ruler: CHALDEAN[(first + index) % 7], index, isDay: offset === 0 };
+  return { ruler: CHALDEAN[(first + index) % 7], index, isDay: offset === 0, dayDate };
 }
 
 // Local noon, `days` days from the given moment's date.

@@ -161,6 +161,7 @@ function showNextSavedSeed() {
 
 // Any visitor input restarts the countdown to attract mode.
 function noteUserActivity() {
+  resetIdleQuicken(); // quicken.js: idle quickening counts from the last input
   clearTimeout(idleTimer);
   if (!ATTRACT_ENABLED) return;
   idleTimer = setTimeout(() => {

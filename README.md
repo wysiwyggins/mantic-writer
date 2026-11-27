@@ -140,6 +140,7 @@ Reboot: the sketch comes up full-screen after its title screen. **Alt-F4** leave
 | Input | Action |
 | --- | --- |
 | Touch a chord of pads, then release all | Show that chord's figure (order doesn't matter) |
+| Touch one pad alone and release | A random figure, like the random button (pads 0–2 show their pre-made arrangements instead) |
 | Random button (D10), Space, Enter or click | A random figure |
 | Turn the knob | Choose one of 8 variations. A slider along the bottom shows the knob position while turning (hidden 3 s after it stops); the figure on screen redraws once the knob stops |
 | Ctrl/Cmd-S | Save the figure on screen |
@@ -148,11 +149,12 @@ Reboot: the sketch comes up full-screen after its title screen. **Alt-F4** leave
 | Drag a JSON file onto the window | Import a saved list (merged with the current one) |
 | **A** key or attract button (D8) | Toggle attract mode |
 | **Q** key | A random figure that quickens (for testing) |
+| No input for 5 minutes | 1 in 4 chance of a figure that quickens, as with Q (checked every 5 idle minutes) |
 | **+** / **-** keys | Bigger or smaller tiles (1x, 2x, 3x…), remembered across restarts |
 
 **Variations**: the knob's zone is part of the seed. Zone 0 gives the plain chord seed (`48.50.53`), so older saved figures still match; other zones add a suffix (`48.50.53~3`). Changing `VARIATIONS` in `input.js` changes every zone except 0.
 
-**Daily figures**: the date is part of the seed (`48.50.53~3@2026-11-18`), so figures change at midnight by the Pi's clock. Saved seeds keep their date and come back exactly. Pre-made arrangements show every day. Set `DAILY_SEEDS` in `input.js` to `false` to turn this off. Without a network, the Pi only keeps time across power-offs if its RTC battery is fitted.
+**Daily and hourly figures**: the date and planetary hour are part of the seed (`48.50.53~3@2026-11-18h4`), so each chord's figure changes every planetary hour. The date is the planetary day, which starts at sunrise, and `h0`–`h23` counts hours from sunrise (see `planetaryHours.js`). Saved seeds keep their date and hour and come back exactly; older seeds with only a date, or none, still work. Pre-made arrangements show at every hour. Set `HOURLY_SEEDS` in `input.js` to `false` for one figure per calendar day (changing at midnight), or `DAILY_SEEDS` to `false` for the same figure always. Without a network, the Pi only keeps time across power-offs if its RTC battery is fitted.
 
 **Quickening**: about 1 in 100 figures come alive for 30 seconds, growing, churning and withering back while their title glitches, then settling. Which figures quicken is part of the seed, so it replays the same way. Settings are at the top of `quicken.js`.
 

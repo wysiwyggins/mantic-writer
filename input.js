@@ -14,16 +14,24 @@
 // redraws the figure on screen as the matching variation of its chord.
 //
 // The Nano's second button (CC 65) shows a completely random figure, like a
-// mouse click.
+// mouse click. So does a single pad touched and released on its own, unless
+// that pad has a pre-made arrangement (TILEMAP_CHORDS in tilemaps.js).
 //
 // With DAILY_SEEDS on, the date is added to every chord seed
 // ("48.50.53~3@2026-11-18"), so each chord shows a different figure each day
 // and the same figure all day. The date is part of the saved seed, so saved
 // figures still come back exactly. Seeds saved without a date (before this
 // existed) also still come back unchanged.
+//
+// With HOURLY_SEEDS on as well, the planetary hour (planetaryHours.js) is
+// added too ("48.50.53~3@2026-11-18h4"): the date is then the planetary day,
+// which runs sunrise to sunrise, and h0-h23 the hour within it (h0 = first
+// hour after sunrise). Each chord shows a different figure each planetary
+// hour. Where the sun doesn't rise or set, it falls back to the date alone.
 
 const ATTRACT_TOGGLE_CC = 64;  // Nano's attract-mode button (sent as CC 64)
 const DAILY_SEEDS = true;      // false: a chord shows the same figure every day
+const HOURLY_SEEDS = true;     // false: the same figure all day (only applies with DAILY_SEEDS)
 const RANDOM_CC = 65;          // Nano's random-figure button (must match RANDOM_CC in the firmware)
 const VARIATION_CC = 1;         // Nano's potentiometer (must match POT_CC in the firmware)
 const SLIDER_REVERSED = true;  // draw the knob slider mirrored, to match the turning direction of the pot as wired
@@ -137,7 +145,10 @@ function knobMoved(value) {
   // slider when the knob has actually been turned. Each move keeps it up for
   // another INDICATOR_DURATION, so it hides once the knob is at rest.
   let turned = lastKnobValue !== null && Math.abs(value - lastKnobValue) > 1;
-  if (turned) indicatorUntil = millis() + INDICATOR_DURATION;
+  if (turned) {
+    indicatorUntil = millis() + INDICATOR_DURATION;
+    noteUserActivity(); // archive.js: counts as input for the idle timers
+  }
   lastKnobValue = value;
   if (turned && loading) loaderKnobTurned(value); // loader.js: hue shift and message
 
@@ -196,29 +207,26 @@ function noteActivity() {
 function finishChord() {
   clearTimeout(stuckTimer);
   if (chordNotes.size === 0) return;
-  let seed = chordSeed(chordToSeed(chordNotes));
-  padTilesShown = new Set(chordNotes); // keep the finished gesture's tiles up briefly
+  let base = chordToSeed(chordNotes);
+  let random = chordNotes.size === 1 && !(base in TILEMAP_CHORDS);
+  let seed = random ? undefined : chordSeed(base);
+  padTilesShown = new Set(chordNotes);
   padTilesUntil = millis() + PAD_TILES_LINGER;
   chordNotes.clear();
-  noteUserActivity(); // archive.js: resets the idle timer for attract mode
-  initializeSketch(seed, true); // through the loading screen (loader.js)
+  noteUserActivity();
+  initializeSketch(seed, true);
 }
 
-// Sorted note numbers, e.g. "48.50.53". Order-independent and readable.
+
 function chordToSeed(notes) {
   return [...notes].sort((a, b) => a - b).join('.');
 }
 
-// Called from draw(): a slider one row above the bottom, a box-drawing line with
-// a bullet for the knob and a pair of opposites at the ends (SLIDER_END_PAIRS),
-// so visitors can see where the knob is turned to.
 function drawVariationIndicator() {
   if (millis() >= indicatorUntil || lastKnobValue === null) {
     indicatorShowing = false;
     return;
   }
-  // New pair each time it appears. crypto, not random(): Math.random is
-  // reseeded globally when a figure is named (sketch.js), so leave it alone.
   if (!indicatorShowing) {
     let r = crypto.getRandomValues(new Uint32Array(1))[0];
     sliderEnds = SLIDER_END_PAIRS[r % SLIDER_END_PAIRS.length];
@@ -226,18 +234,17 @@ function drawVariationIndicator() {
   indicatorShowing = true;
   let w = globalVars.TILE_WIDTH, h = globalVars.TILE_HEIGHT;
   let left = Math.floor((CANVAS_COLS - SLIDER_LENGTH) / 2) * w;
-  let y = height - 2 * h; // second row from the bottom
+  let y = height - 2 * h; 
   let knobAt = Math.round(lastKnobValue / 127 * (SLIDER_LENGTH - 1));
   if (SLIDER_REVERSED) knobAt = SLIDER_LENGTH - 1 - knobAt;
   for (let i = 0; i < SLIDER_LENGTH; i++) {
     let key = i === knobAt ? 'BULLET'
-      : i === 0 ? 'BOX_RIGHT_VERTICAL'               // ├
-      : i === SLIDER_LENGTH - 1 ? 'BOX_LEFT_VERTICAL' // ┤
+      : i === 0 ? 'BOX_RIGHT_VERTICAL'
+      : i === SLIDER_LENGTH - 1 ? 'BOX_LEFT_VERTICAL'
       : 'BOX_HORIZONTAL';
     let coords = spritesheetData.tiles[key];
     image(spritesheet, left + i * w, y, w, h, coords[0] * w, coords[1] * h, w, h);
   }
-  // The pair of opposites marks the two ends, right against the slider.
   let ends = [[sliderEnds[0], left - w], [sliderEnds[1], left + SLIDER_LENGTH * w]];
   for (let [key, x] of ends) {
     let coords = spritesheetData.tiles[key];
@@ -245,37 +252,38 @@ function drawVariationIndicator() {
   }
 }
 
-// Called from draw(): one tile per pad touched in the current gesture, placed
-// under where that finger or palm rests (PAD_TILES). Shown while the gesture
-// is open and for PAD_TILES_LINGER ms after the figure is set.
 function drawPadTiles(sheet) {
   if (heldNotes.size === 0 && millis() >= padTilesUntil) return;
   let w = globalVars.TILE_WIDTH, h = globalVars.TILE_HEIGHT;
   let centre = Math.floor(CANVAS_COLS / 2);
-  let top = height - 4 * h; // finger row; palm row below it, both above the knob slider
+  let top = height - 4 * h; 
   for (let note of padTilesShown) {
     let pad = PAD_TILES[note];
-    if (!pad) continue; // a keyboard note with no pad
+    if (!pad) continue;
     let coords = spritesheetData.tiles[pad.glyph];
     image(sheet, (centre + pad.col) * w, top + pad.row * h, w, h, coords[0] * w, coords[1] * h, w, h);
   }
 }
 
-// The full seed for a chord: knob variation, then today's date.
+
+// The full seed for a chord: knob variation, then the date and planetary hour.
 function chordSeed(base) {
   let seed = variation === 0 ? base : `${base}~${variation}`;
-  return DAILY_SEEDS ? `${seed}@${todayString()}` : seed;
+  if (!DAILY_SEEDS) return seed;
+  let now = new Date();
+  let hour = HOURLY_SEEDS ? planetaryHour(now) : null; // planetaryHours.js
+  if (hour) return `${seed}@${dateString(hour.dayDate)}h${hour.index}`;
+  return `${seed}@${dateString(now)}`;
 }
 
-// The Pi's local date, e.g. "2026-11-18". Figures change at local midnight.
-function todayString() {
-  let d = new Date();
+// A local date as e.g. "2026-11-18".
+function dateString(d) {
   let pad = n => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-// "48.50.53~3@2026-11-18" -> "48.50.53"; null for seeds that didn't come from a chord.
+// "48.50.53~3@2026-11-18h4" -> "48.50.53"; null for seeds that didn't come from a chord.
 function chordBase(seed) {
-  let match = /^(\d+(?:\.\d+)*)(?:~\d+)?(?:@\d{4}-\d{2}-\d{2})?$/.exec(seed || '');
+  let match = /^(\d+(?:\.\d+)*)(?:~\d+)?(?:@\d{4}-\d{2}-\d{2}(?:h\d{1,2})?)?$/.exec(seed || '');
   return match ? match[1] : null;
 }

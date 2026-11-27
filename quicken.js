@@ -14,6 +14,9 @@
 //
 //   Q   show a random figure that quickens (for testing)
 //
+// While nobody touches anything, every IDLE_QUICKEN_INTERVAL there is an
+// IDLE_QUICKEN_CHANCE of showing a figure that quickens, the same as Q.
+//
 // Only occupied cells and their empty neighbours are visited each step, and
 // the number of cells is capped, so it stays light on the Pi.
 
@@ -26,8 +29,26 @@ const QUICKEN_TOP_ROWS = 5;       // rows kept clear for the figure name
 const QUICKEN_SOUND_EVERY = 15;   // generations between sounds
 const GLITCH_LETTERS_EVERY = 3;   // generations between letter glitches
 const GLITCH_WORDS_EVERY = 15;    // generations between word glitches
+const IDLE_QUICKEN_INTERVAL = 5 * 60000; // ms of no input between idle chances
+const IDLE_QUICKEN_CHANCE = 0.25;  // chance, each interval, of showing a quickening figure
 
 let quickening = null; // state of the running animation, or null
+let idleQuickenTimer = null;
+
+// Called on every input (archive.js noteUserActivity): restart the idle count.
+function resetIdleQuicken() {
+  clearInterval(idleQuickenTimer);
+  idleQuickenTimer = setInterval(idleQuickenChance, IDLE_QUICKEN_INTERVAL);
+}
+
+function idleQuickenChance() {
+  if (booting || loading || isQuickening() || isAttractMode()) return;
+  // crypto, not Math.random: Math.random is reseeded when a figure is named.
+  let r = crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32;
+  if (r >= IDLE_QUICKEN_CHANCE) return;
+  console.log('Idle: showing a quickening figure');
+  initializeSketch(randomQuickeningSeed(), true); // same as the Q key
+}
 
 function quickenRng(seed) {
   return new Math.seedrandom('mantic-quicken:' + seed);
